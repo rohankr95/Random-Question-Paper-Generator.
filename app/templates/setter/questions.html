@@ -15,7 +15,7 @@
   {% for q in items %}
   <tr>
     <td>{{ q.id }}</td>
-    <td class="qtext">{{ q.text }}{% if q.status == 'rejected' and q.review_note %}<div class="note">Reviewer: {{ q.review_note }}</div>{% endif %}</td>
+    <td class="qtext"><div class="rich">{{ q.text|rich }}</div>{% if q.status == 'rejected' and q.review_note %}<div class="note">Reviewer: {{ q.review_note }}</div>{% endif %}</td>
     <td>{{ q.subject }}{% if q.topic %}<br><small class="muted">{{ q.topic }}</small>{% endif %}</td>
     <td>{{ diff_tag(q.difficulty) }}</td><td>{{ q.marks }}</td><td>{{ q.est_minutes }}m</td>
     <td>{{ status_tag(q.status) }}</td>

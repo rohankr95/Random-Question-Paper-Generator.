@@ -8,9 +8,12 @@
 </select>
 {% endmacro %}
 {% macro question_fields(form, subjects, topics) %}
-<label>Question text *
-  <textarea name="text" rows="6" required>{{ form.get('text', '') }}</textarea>
-</label>
+<div class="field">
+  <label for="q-text">Question text *</label>
+  <p class="hint">Use the toolbar for <b>bold</b>, <i>italic</i>, lists, tables, superscript/subscript and symbols.
+    You can also paste tables straight from Excel, Word or Google Docs/Sheets.</p>
+  <textarea id="q-text" name="text" rows="8" required data-rich data-height="300">{{ form.get('text', '') }}</textarea>
+</div>
 <div class="grid3">
   <label>Subject *
     <input name="subject" list="subjects" required value="{{ form.get('subject', '') }}" placeholder="e.g. Physics">
@@ -31,9 +34,10 @@
     <input type="number" name="est_minutes" min="1" max="600" required value="{{ form.get('est_minutes', '') }}">
   </label>
 </div>
-<label>Model answer / marking scheme <small>(only the admin sees this, in the answer key)</small>
-  <textarea name="answer" rows="3">{{ form.get('answer', '') }}</textarea>
-</label>
+<div class="field">
+  <label for="q-answer">Model answer / marking scheme <small>(only the admin sees this, in the answer key)</small></label>
+  <textarea id="q-answer" name="answer" rows="4" data-rich data-height="200">{{ form.get('answer', '') }}</textarea>
+</div>
 <datalist id="subjects">{% for s in subjects %}<option value="{{ s }}">{% endfor %}</datalist>
 <datalist id="topics">{% for t in topics %}<option value="{{ t }}">{% endfor %}</datalist>
 {% endmacro %}

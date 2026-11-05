@@ -66,7 +66,21 @@ table.list { background: var(--card); border: 1px solid var(--border); border-ra
 tr.total td { font-weight: 700; }
 tr.bad td, .bad { color: var(--danger); }
 .good { color: var(--easy); }
-td.qtext { white-space: pre-wrap; max-width: 520px; }
+td.qtext { max-width: 560px; }
+.field { margin-bottom: .9rem; }
+.field > label { margin-bottom: .2rem; }
+.hint { margin: 0 0 .35rem; font-size: .82rem; color: var(--muted); }
+.field .jodit-container { margin-top: .25rem; }
+/* Formatted question text (tables, lists, bold...) */
+.rich { overflow-wrap: anywhere; }
+.rich > :first-child { margin-top: 0; }
+.rich > :last-child { margin-bottom: 0; }
+.rich p { margin: 0 0 .5em; }
+.rich ul, .rich ol { margin: .3em 0 .5em; padding-left: 1.5em; }
+.rich table { border-collapse: collapse; margin: .4em 0; width: auto; max-width: 100%; display: block; overflow-x: auto; }
+.rich th, .rich td { border: 1px solid var(--muted); padding: .25em .55em; text-transform: none; letter-spacing: 0;
+  font-size: inherit; color: inherit; vertical-align: top; }
+.rich th { background: var(--bg); font-weight: 600; }
 .nowrap { white-space: nowrap; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }

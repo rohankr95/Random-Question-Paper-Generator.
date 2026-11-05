@@ -6,7 +6,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from . import generator
 from .models import (DIFFICULTIES, AuditLog, Paper, PaperQuestion, Question, User, db, log, utcnow)
-from .questions import apply_values, find_similar, parse_question_form, subjects, topics
+from .questions import apply_values, editor_form_values, find_similar, parse_question_form, subjects, topics
 from .utils import parse_int, role_required
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -170,9 +170,7 @@ def edit_question(qid):
             flash("Question saved. Papers already generated keep their original wording.", "success")
             return redirect(request.args.get("back") or url_for("admin.questions"))
     form = request.form if request.method == "POST" else {
-        "text": q.text, "subject": q.subject, "topic": q.topic, "difficulty": q.difficulty,
-        "marks": q.marks, "est_minutes": q.est_minutes, "answer": q.answer,
-        "status": q.status, "review_note": q.review_note,
+        **editor_form_values(q), "status": q.status, "review_note": q.review_note,
     }
     return render_template("admin/question_edit.html", q=q, form=form, subjects=subjects(), topics=topics())
 

@@ -1,7 +1,8 @@
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from .models import DIFFICULTIES, Question, db, log
-from .questions import apply_values, find_similar, parse_csv, parse_question_form, subjects, topics
+from .questions import (apply_values, editor_form_values, find_similar, parse_csv, parse_question_form,
+                        subjects, topics)
 from .utils import role_required
 
 bp = Blueprint("setter", __name__, url_prefix="/setter")
@@ -103,10 +104,7 @@ def edit_question(qid):
             flash("Question updated and re-submitted for review.", "success")
             return redirect(url_for("setter.questions"))
         dup = result == "duplicate"
-    form = request.form if request.method == "POST" else {
-        "text": q.text, "subject": q.subject, "topic": q.topic, "difficulty": q.difficulty,
-        "marks": q.marks, "est_minutes": q.est_minutes, "answer": q.answer,
-    }
+    form = request.form if request.method == "POST" else editor_form_values(q)
     return render_template("setter/question_form.html", q=q, form=form, is_new=False, dup=dup,
                            subjects=subjects(), topics=topics())
 

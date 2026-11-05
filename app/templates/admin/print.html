@@ -34,10 +34,10 @@
 <ol class="questions">
   {% for it in items %}
   <li>
-    <div class="q"><div class="pre">{{ it.text }}</div><span class="marks">[{{ it.marks }}]</span></div>
+    <div class="q"><div class="rich">{{ it.text|rich }}</div><span class="marks">[{{ it.marks }}]</span></div>
     {% if show_key %}
       <div class="key"><small>{{ it.difficulty }} · {{ it.topic or 'no topic' }} · est. {{ it.est_minutes }} min</small>
-        <div class="pre">{{ it.answer or '(no model answer provided)' }}</div></div>
+        <div class="rich">{% if it.answer %}{{ it.answer|rich }}{% else %}(no model answer provided){% endif %}</div></div>
     {% endif %}
   </li>
   {% endfor %}

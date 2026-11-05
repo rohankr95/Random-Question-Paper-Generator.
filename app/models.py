@@ -18,8 +18,9 @@ def utcnow():
 
 
 def normalize_text(text):
-    """Lower-case, strip punctuation and collapse whitespace (used for duplicate checks)."""
-    text = re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower())
+    """Lower-case, strip formatting/punctuation and collapse whitespace (used for duplicate checks)."""
+    from .richtext import to_plain
+    text = re.sub(r"[^a-z0-9 ]+", " ", to_plain(text or "").lower())
     return re.sub(r"\s+", " ", text).strip()
 
 
