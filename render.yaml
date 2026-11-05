@@ -1,0 +1,23 @@
+# One-click deploy on Render (free web service).
+# Render's free disk is wiped on every deploy/restart, so point DATABASE_URL at a free
+# PostgreSQL database (e.g. Neon or Supabase) - see README.
+services:
+  - type: web
+    name: question-paper-generator
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false

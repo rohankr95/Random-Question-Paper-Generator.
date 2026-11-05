@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf %}
+{% block content %}
+<h1>Users</h1>
+<div class="cols">
+<div class="card">
+  <h2>All users</h2>
+  <table>
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr class="{{ '' if u.is_active else 'muted' }}">
+      <td>{{ u.username }}</td><td>{{ u.full_name }}</td><td>{{ u.role }}</td>
+      <td>{{ 'active' if u.is_active else 'disabled' }}</td>
+      <td class="nowrap">
+        {% if u.id != current_user.id %}
+        <form method="post" action="{{ url_for('admin.toggle_user', uid=u.id) }}" class="inline">{{ csrf() }}<button class="link">{{ 'Disable' if u.is_active else 'Enable' }}</button></form>
+        <form method="post" action="{{ url_for('admin.reset_password', uid=u.id) }}" class="inline" onsubmit="return confirm('Generate a new password for {{ u.username }}?')">{{ csrf() }}<button class="link">Reset password</button></form>
+        {% else %}<small class="muted">you</small>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>Add a user</h2>
+  <form method="post">{{ csrf() }}
+    <label>Username <input name="username" required pattern="[A-Za-z0-9._]+"></label>
+    <label>Full name <input name="full_name"></label>
+    <label>Initial password (min 8) <input name="password" type="text" minlength="8" required></label>
+    <label>Role
+      <select name="role"><option value="setter">Question setter</option><option value="admin">Admin</option></select>
+    </label>
+    <button class="btn primary">Create user</button>
+  </form>
+  <p class="muted small">Users can change their password after logging in. Disabling a user keeps their questions in the pool.</p>
+</div>
+</div>
+{% endblock %}

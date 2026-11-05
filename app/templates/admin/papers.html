@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "_macros.html" import status_tag %}
+{% block content %}
+<h1>Papers</h1>
+<p class="filters">
+  <a href="{{ url_for('admin.papers') }}" class="{{ 'active' if not status }}">All</a>
+  {% for s in ['draft','final','discarded'] %}<a href="{{ url_for('admin.papers', status=s) }}" class="{{ 'active' if status == s }}">{{ s|capitalize }}</a>{% endfor %}
+</p>
+<table class="list">
+  <thead><tr><th>Code</th><th>Title</th><th>Subject</th><th>Qs</th><th>Marks</th><th>Duration</th><th>Sets</th><th>Status</th><th>Generated</th><th>By</th></tr></thead>
+  <tbody>
+  {% for p in papers %}
+  <tr>
+    <td><a href="{{ url_for('admin.paper', pid=p.id) }}">{{ p.code }}</a></td><td>{{ p.title }}</td><td>{{ p.subject }}</td>
+    <td>{{ p.items|length }}</td><td>{{ p.total_marks }}</td><td>{{ p.duration_minutes }}m</td><td>{{ p.num_sets }}</td>
+    <td>{{ status_tag(p.status) }}{% if p.status_note %}<br><small class="muted">{{ p.status_note }}</small>{% endif %}</td>
+    <td class="nowrap">{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ p.created_by.username }}</td>
+  </tr>
+  {% else %}<tr><td colspan="10" class="muted">No papers yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf %}
+{% block content %}
+<h1>Import questions from CSV</h1>
+<div class="card">
+  <p>Upload a UTF-8 CSV with a header row. Columns:</p>
+  <pre>text,subject,topic,difficulty,marks,est_minutes,answer
+"Define Newton's first law.",Physics,Mechanics,easy,2,3,"An object stays at rest..."
+"Derive the lens formula.",Physics,Optics,difficult,5,12,</pre>
+  <p class="muted small"><code>difficulty</code> accepts easy / medium (med) / difficult (hard). <code>topic</code> and <code>answer</code> may be empty.
+    All imported questions go to the admin for review.</p>
+  <form method="post" enctype="multipart/form-data">{{ csrf() }}
+    <label>CSV file <input type="file" name="file" accept=".csv,text/csv" required></label>
+    <label class="check"><input type="checkbox" name="allow_duplicates" value="1"> Import rows even if they look like duplicates</label>
+    <button class="btn primary">Import</button>
+  </form>
+</div>
+{% if report %}
+<div class="card">
+  <h2>Result</h2>
+  <p><strong>{{ report.added }}</strong> question(s) added and sent for review.</p>
+  {% if report.duplicates %}<h3>Skipped as duplicates</h3><ul>{% for e in report.duplicates %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+  {% if report.errors %}<h3>Rows with errors</h3><ul class="danger">{% for e in report.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

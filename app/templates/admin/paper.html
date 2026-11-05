@@ -1,0 +1,68 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, diff_tag, status_tag %}
+{% block content %}
+<h1>{{ p.title }} <small class="muted">{{ p.code }}</small> {{ status_tag(p.status) }}</h1>
+<p class="muted">{{ p.subject }} · {{ p.items|length }} questions · {{ p.total_marks }} marks · {{ p.duration_minutes }} min ·
+  generated {{ p.created_at.strftime('%Y-%m-%d %H:%M') }} UTC by {{ p.created_by.username }} · seed <code>{{ p.seed }}</code></p>
+{% if p.status_note %}<div class="flash info">Discarded: {{ p.status_note }}</div>{% endif %}
+
+<div class="actions">
+  {% for i in range(p.num_sets) %}
+    <a class="btn" target="_blank" href="{{ url_for('admin.print_paper', pid=p.id, set=i) }}">🖨 Print{{ ' set ' ~ 'ABCDEF'[i] if p.num_sets > 1 }}</a>
+    <a class="btn" target="_blank" href="{{ url_for('admin.print_paper', pid=p.id, set=i, key=1) }}">🔑 Answer key{{ ' ' ~ 'ABCDEF'[i] if p.num_sets > 1 }}</a>
+  {% endfor %}
+  {% if p.status == 'draft' %}
+  <form method="post" action="{{ url_for('admin.finalize_paper', pid=p.id) }}" class="inline">{{ csrf() }}
+    <button class="btn primary" onclick="return confirm('Finalise this paper? Its questions will be marked as used.')">✔ Finalise</button></form>
+  <form method="post" action="{{ url_for('admin.discard_paper', pid=p.id) }}" class="inline discard">{{ csrf() }}
+    <input name="reason" placeholder="Reason for discarding (required)" required>
+    <button class="btn danger">Discard</button></form>
+  {% endif %}
+</div>
+
+<div class="cols">
+<div class="card">
+  <h2>Fairness report</h2>
+  {% for w in report.warnings %}<div class="flash warning">⚠ {{ w }}</div>{% endfor %}
+  <table>
+    <thead><tr><th>Level</th><th>Questions</th><th>Marks</th><th>% of marks</th><th>Est. time</th></tr></thead>
+    <tbody>
+    {% for d, r in report.by_difficulty.items() %}
+      <tr><td>{{ diff_tag(d) }}</td><td>{{ r.count }}</td><td>{{ r.marks }}</td>
+        <td><div class="bar"><span class="{{ d }}" style="width: {{ r.marks_pct }}%"></span></div> {{ r.marks_pct }}%</td>
+        <td>{{ r.minutes }}m</td></tr>
+    {% endfor %}
+    <tr class="total"><td>Total</td><td>{{ report.count }}</td><td>{{ report.total_marks }}</td><td></td><td>{{ report.total_minutes }}m / {{ p.duration_minutes }}m</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Drawn from an eligible pool of <strong>{{ report.pool_size }}</strong> approved questions.
+    <strong>{{ report.fresh_questions }}</strong> of {{ report.count }} questions have never appeared in a finalised paper.</p>
+</div>
+<div class="card">
+  <h2>Coverage</h2>
+  <h3>By setter</h3>
+  <ul class="kv">{% for name, n in report.by_setter.items() %}<li><span>{{ name }}</span><strong>{{ n }}</strong></li>{% endfor %}</ul>
+  <h3>By topic</h3>
+  <ul class="kv">{% for t, n in report.by_topic.items() %}<li><span>{{ t }}</span><strong>{{ n }}</strong></li>{% endfor %}</ul>
+  <h3>Blueprint used</h3>
+  <p class="small">
+    {{ cfg.easy }} easy / {{ cfg.medium }} medium / {{ cfg.difficult }} difficult ·
+    target marks: {{ cfg.total_marks or 'any' }} ·
+    exclude last {{ cfg.exclude_recent }} paper(s) ·
+    {{ 'fresh only · ' if cfg.fresh_only }}{{ 'setter balance · ' if cfg.balance_setters }}{{ 'topic spread · ' if cfg.cover_topics }}
+    order: {{ cfg.order }} · sets: {{ p.num_sets }}</p>
+</div>
+</div>
+
+<div class="card">
+  <h2>Questions (set A order)</h2>
+  <table class="list">
+    <thead><tr><th>#</th><th>Question</th><th>Topic</th><th>Level</th><th>Marks</th><th>Time</th></tr></thead>
+    <tbody>
+    {% for it in p.items %}
+      <tr><td>{{ loop.index }}</td><td class="qtext">{{ it.text }}</td><td>{{ it.topic }}</td><td>{{ diff_tag(it.difficulty) }}</td>
+        <td>{{ it.marks }}</td><td>{{ it.est_minutes }}m</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

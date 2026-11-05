@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% from "_macros.html" import diff_tag, status_tag %}
+{% block content %}
+<h1>Admin dashboard</h1>
+<div class="actions">
+  <a class="btn primary" href="{{ url_for('admin.generate') }}">⚡ Generate a question paper</a>
+  <a class="btn" href="{{ url_for('admin.review') }}">Review queue {% if pending %}<span class="pill">{{ pending }}</span>{% endif %}</a>
+</div>
+<div class="cols">
+<div class="card">
+  <h2>Approved question pool</h2>
+  {% if pool %}
+  <table>
+    <thead><tr><th>Subject</th>{% for d in DIFFICULTIES %}<th>{{ diff_tag(d) }}</th>{% endfor %}<th>Total</th><th></th></tr></thead>
+    <tbody>
+    {% for subject, c in pool.items() %}
+      <tr><td>{{ subject }}</td>{% for d in DIFFICULTIES %}<td>{{ c[d] }}</td>{% endfor %}
+        <td><strong>{{ c.values()|sum }}</strong></td>
+        <td><a href="{{ url_for('admin.generate', subject=subject) }}">Generate</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No approved questions yet. Add setters, let them submit questions, then approve them in the review queue.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Setters</h2>
+  <table>
+    <thead><tr><th>Setter</th><th>Approved</th><th>Pending</th><th>Rejected</th></tr></thead>
+    <tbody>
+    {% for u, c in setters %}
+      <tr class="{{ '' if u.is_active else 'muted' }}"><td><a href="{{ url_for('admin.questions', setter=u.id) }}">{{ u.display_name }}</a></td>
+        <td>{{ c.approved }}</td><td>{{ c.pending }}</td><td>{{ c.rejected }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No setters yet. <a href="{{ url_for('admin.users') }}">Add one</a>.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+<div class="card">
+  <h2>Recent papers</h2>
+  <table>
+    <thead><tr><th>Code</th><th>Title</th><th>Subject</th><th>Marks</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>
+    {% for p in recent %}
+      <tr><td><a href="{{ url_for('admin.paper', pid=p.id) }}">{{ p.code }}</a></td><td>{{ p.title }}</td><td>{{ p.subject }}</td>
+        <td>{{ p.total_marks }}</td><td>{{ status_tag(p.status) }}</td><td>{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No papers yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

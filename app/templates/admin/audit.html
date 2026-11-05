@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Audit log</h1>
+<p class="muted">Every login, review decision, paper generation (with its random seed), finalisation, discard and print is recorded here and cannot be edited from the app.</p>
+<table class="list">
+  <thead><tr><th>When (UTC)</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr><td class="nowrap">{{ e.at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td>{{ e.user.username if e.user else '-' }}</td>
+      <td><code>{{ e.action }}</code></td><td>{{ e.detail }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf %}
+{% block content %}
+<div class="card narrow">
+  <h1>First-time setup</h1>
+  <p class="muted">No users exist yet. Create the administrator account. This page disappears once an account exists.</p>
+  <form method="post">{{ csrf() }}
+    <label>Admin username <input name="username" required value="admin"></label>
+    <label>Full name <input name="full_name"></label>
+    <label>Password (min 8 chars) <input type="password" name="password" minlength="8" required></label>
+    <label>Confirm password <input type="password" name="confirm" minlength="8" required></label>
+    <button class="btn primary">Create admin</button>
+  </form>
+</div>
+{% endblock %}

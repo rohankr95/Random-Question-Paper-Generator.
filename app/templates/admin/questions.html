@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, diff_tag, status_tag, select %}
+{% block content %}
+<h1>Question bank <small class="muted">({{ items|length }})</small></h1>
+<form class="filters" method="get">
+  {{ select('subject', subjects, f.subject, 'All subjects') }}
+  {{ select('topic', topics, f.topic, 'All topics') }}
+  {{ select('difficulty', DIFFICULTIES, f.difficulty, 'All difficulties') }}
+  {{ select('status', ['pending','approved','rejected'], f.status, 'All statuses') }}
+  <select name="setter"><option value="">All setters</option>
+    {% for u in setters %}<option value="{{ u.id }}" {% if f.setter == u.id|string %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}
+  </select>
+  <input name="q" value="{{ f.q }}" placeholder="Search text">
+  <button class="btn">Filter</button>
+</form>
+<table class="list">
+  <thead><tr><th>#</th><th>Question</th><th>Subject / topic</th><th>Level</th><th>Marks</th><th>Time</th><th>Setter</th><th>Used</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for q in items %}
+  <tr>
+    <td>{{ q.id }}</td>
+    <td class="qtext">{{ q.text }}</td>
+    <td>{{ q.subject }}{% if q.topic %}<br><small class="muted">{{ q.topic }}</small>{% endif %}</td>
+    <td>{{ diff_tag(q.difficulty) }}</td><td>{{ q.marks }}</td><td>{{ q.est_minutes }}m</td>
+    <td>{{ q.setter.display_name }}</td>
+    <td>{{ q.times_used }}×</td>
+    <td>{{ status_tag(q.status) }}</td>
+    <td class="nowrap">
+      <a href="{{ url_for('admin.edit_question', qid=q.id) }}">Edit</a>
+      <form method="post" action="{{ url_for('admin.delete_question', qid=q.id) }}" class="inline" onsubmit="return confirm('Delete (or retire) this question?')">{{ csrf() }}<button class="link danger">Delete</button></form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="10" class="muted">No questions match.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}
