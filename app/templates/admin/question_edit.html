@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, question_fields %}
+{% block content %}
+<h1>Edit question #{{ q.id }} <small class="muted">by {{ q.setter.display_name }} · used {{ q.times_used }}×</small></h1>
+<div class="card">
+<form method="post">{{ csrf() }}
+  {{ question_fields(form, subjects, topics) }}
+  <div class="grid3">
+    <label>Status
+      <select name="status">{% for s in ['pending','approved','rejected'] %}<option value="{{ s }}" {% if form.get('status') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    </label>
+    <label class="span2">Note to setter <input name="review_note" value="{{ form.get('review_note', '') }}"></label>
+  </div>
+  <div class="actions">
+    <button class="btn primary">Save</button>
+    <a class="btn" href="{{ request.args.get('back') or url_for('admin.questions') }}">Cancel</a>
+  </div>
+</form>
+</div>
+{% endblock %}

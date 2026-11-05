@@ -1,0 +1,20 @@
+body { font: 12pt/1.5 "Times New Roman", Georgia, serif; color: #000; background: #fff; max-width: 800px; margin: 0 auto; padding: 1.5rem; }
+header { border-bottom: 2px solid #000; padding-bottom: .6rem; margin-bottom: 1rem; text-align: center; }
+h1 { font-size: 18pt; margin: 0 0 .4rem; }
+.meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; font-size: 11pt; }
+.student { margin-top: .8rem; text-align: left; }
+.instructions { text-align: left; margin-top: .8rem; font-size: 11pt; }
+.pre { white-space: pre-wrap; }
+ol.questions { padding-left: 1.6rem; }
+ol.questions li { margin-bottom: 1rem; page-break-inside: avoid; }
+.q { display: flex; justify-content: space-between; gap: 1rem; }
+.marks { white-space: nowrap; font-weight: bold; }
+.key { margin-top: .3rem; padding: .4rem .6rem; border-left: 3px solid #888; background: #f4f4f4; }
+.key small { color: #555; }
+footer { text-align: center; margin-top: 2rem; }
+.toolbar { margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; font-family: system-ui, sans-serif; }
+.toolbar button { padding: .5rem 1rem; font-size: 1rem; cursor: pointer; }
+.warn { color: #b3261e; }
+.watermark { position: fixed; top: 40%; left: 0; right: 0; text-align: center; font-size: 110pt; color: rgba(200, 0, 0, .08);
+  transform: rotate(-30deg); pointer-events: none; font-family: sans-serif; font-weight: bold; }
+@media print { .noprint { display: none; } body { padding: 0; } }

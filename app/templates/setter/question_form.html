@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, question_fields %}
+{% block content %}
+<h1>{{ 'Add a question' if is_new else 'Edit question #' ~ q.id }}</h1>
+<div class="card">
+<form method="post">{{ csrf() }}
+  {{ question_fields(form, subjects, topics) }}
+  {% if dup %}
+  <label class="check warn"><input type="checkbox" name="confirm_duplicate" value="1"> This is not a duplicate - save anyway</label>
+  {% endif %}
+  <div class="actions">
+    <button class="btn primary">{{ 'Submit for review' if is_new else 'Save & re-submit' }}</button>
+    {% if is_new %}<button class="btn" name="add_another" value="1">Submit &amp; add another</button>{% endif %}
+    <a class="btn" href="{{ url_for('setter.questions') }}">Cancel</a>
+  </div>
+</form>
+</div>
+<p class="muted small">Tip: estimate the time an average student needs, not an expert. The admin uses these times to check the paper fits the exam duration.</p>
+{% endblock %}

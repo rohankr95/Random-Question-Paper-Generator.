@@ -1,0 +1,39 @@
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{% macro diff_tag(d) %}<span class="tag {{ d }}">{{ d }}</span>{% endmacro %}
+{% macro status_tag(s) %}<span class="status {{ s }}">{{ s }}</span>{% endmacro %}
+{% macro select(name, options, value, blank=None) %}
+<select name="{{ name }}" id="{{ name }}">
+  {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
+  {% for o in options %}<option value="{{ o }}" {% if (value|string) == (o|string) %}selected{% endif %}>{{ o }}</option>{% endfor %}
+</select>
+{% endmacro %}
+{% macro question_fields(form, subjects, topics) %}
+<label>Question text *
+  <textarea name="text" rows="6" required>{{ form.get('text', '') }}</textarea>
+</label>
+<div class="grid3">
+  <label>Subject *
+    <input name="subject" list="subjects" required value="{{ form.get('subject', '') }}" placeholder="e.g. Physics">
+  </label>
+  <label>Topic / chapter
+    <input name="topic" list="topics" value="{{ form.get('topic', '') }}" placeholder="e.g. Optics">
+  </label>
+  <label>Difficulty *
+    <select name="difficulty" required>
+      <option value="">— choose —</option>
+      {% for d in DIFFICULTIES %}<option value="{{ d }}" {% if form.get('difficulty') == d %}selected{% endif %}>{{ d|capitalize }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Marks *
+    <input type="number" name="marks" min="1" max="100" required value="{{ form.get('marks', '') }}">
+  </label>
+  <label>Estimated time to solve (minutes) *
+    <input type="number" name="est_minutes" min="1" max="600" required value="{{ form.get('est_minutes', '') }}">
+  </label>
+</div>
+<label>Model answer / marking scheme <small>(only the admin sees this, in the answer key)</small>
+  <textarea name="answer" rows="3">{{ form.get('answer', '') }}</textarea>
+</label>
+<datalist id="subjects">{% for s in subjects %}<option value="{{ s }}">{% endfor %}</datalist>
+<datalist id="topics">{% for t in topics %}<option value="{{ t }}">{% endfor %}</datalist>
+{% endmacro %}

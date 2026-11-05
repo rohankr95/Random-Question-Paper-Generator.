@@ -1,0 +1,104 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf %}
+{% block content %}
+<h1>Generate a question paper</h1>
+<p class="muted">Set the blueprint and click <strong>Generate</strong>. Questions are drawn at random from the approved pool -
+nobody (including the admin) can hand-pick them. Every generation is recorded in the audit log with its random seed.</p>
+<form method="post" id="genform">{{ csrf() }}
+<div class="cols">
+  <div class="card">
+    <h2>1. Paper details</h2>
+    <label>Subject *
+      <select name="subject" id="subject" required>
+        <option value="">— choose —</option>
+        {% for s in subjects %}<option value="{{ s }}" {% if form.get('subject') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Paper title <input name="title" value="{{ form.get('title', '') }}" placeholder="e.g. Physics Mid-Term 2026"></label>
+    <div class="grid2">
+      <label>Total marks <small>(blank = no exact target)</small>
+        <input type="number" name="total_marks" id="total_marks" min="0" value="{{ form.get('total_marks', '') }}"></label>
+      <label>Exam duration (minutes)
+        <input type="number" name="duration_minutes" min="1" value="{{ form.get('duration_minutes', 180) }}"></label>
+    </div>
+    <h2>2. Difficulty mix</h2>
+    <div class="grid3">
+      <label><span class="tag easy">easy</span> questions <input type="number" class="cnt" name="easy" id="easy" min="0" value="{{ form.get('easy', 0) }}"></label>
+      <label><span class="tag medium">medium</span> questions <input type="number" class="cnt" name="medium" id="medium" min="0" value="{{ form.get('medium', 0) }}"></label>
+      <label><span class="tag difficult">difficult</span> questions <input type="number" class="cnt" name="difficult" id="difficult" min="0" value="{{ form.get('difficult', 0) }}"></label>
+    </div>
+    <label>Instructions printed on the paper
+      <textarea name="instructions" rows="3">{{ form.get('instructions', '') }}</textarea></label>
+  </div>
+  <div class="card">
+    <h2>3. Fairness options</h2>
+    <label>Don't reuse questions from the last
+      <input type="number" name="exclude_recent" id="exclude_recent" min="0" max="100" class="short" value="{{ form.get('exclude_recent', 0) }}"> finalised paper(s) of this subject</label>
+    <label class="check"><input type="checkbox" name="fresh_only" id="fresh_only" value="1" {% if form.get('fresh_only') %}checked{% endif %}> Use only never-used questions</label>
+    <label class="check"><input type="checkbox" name="balance_setters" value="1" {% if form.get('balance_setters') %}checked{% endif %}> Balance questions across setters</label>
+    <label class="check"><input type="checkbox" name="cover_topics" value="1" {% if form.get('cover_topics') %}checked{% endif %}> Spread questions across topics</label>
+    <label>Question order
+      <select name="order">
+        <option value="difficulty" {% if form.get('order') != 'random' %}selected{% endif %}>Easy → medium → difficult (shuffled within each level)</option>
+        <option value="random" {% if form.get('order') == 'random' %}selected{% endif %}>Fully random</option>
+      </select></label>
+    <label>Number of sets (A, B, C… same questions, different order, to discourage copying)
+      <input type="number" name="num_sets" min="1" max="6" class="short" value="{{ form.get('num_sets', 1) }}"></label>
+    <h2>Pool check</h2>
+    <div id="poolinfo" class="muted">Choose a subject to see what the pool can support.</div>
+  </div>
+</div>
+<div class="generate-bar">
+  <span id="summary"></span>
+  <button class="btn primary big">⚡ Generate question paper</button>
+</div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const ids = ['subject', 'exclude_recent', 'fresh_only', 'easy', 'medium', 'difficult', 'total_marks'];
+  let timer;
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function refresh() {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const box = $('poolinfo');
+      const subject = $('subject').value;
+      const n = ['easy', 'medium', 'difficult'].reduce((a, d) => a + (+$(d).value || 0), 0);
+      $('summary').textContent = n ? n + ' question(s)' + ($('total_marks').value ? ', ' + $('total_marks').value + ' marks' : '') : '';
+      if (!subject) { box.textContent = 'Choose a subject to see what the pool can support.'; return; }
+      const p = new URLSearchParams({subject, exclude_recent: $('exclude_recent').value || 0,
+        easy: $('easy').value || 0, medium: $('medium').value || 0, difficult: $('difficult').value || 0});
+      if ($('fresh_only').checked) p.set('fresh_only', '1');
+      const r = await fetch('{{ url_for("admin.pool_info") }}?' + p);
+      if (!r.ok) { box.textContent = 'Could not load pool info.'; return; }
+      const d = await r.json();
+      let html = '<table><thead><tr><th>Level</th><th>Available</th><th>Requested</th><th>By marks</th></tr></thead><tbody>';
+      for (const lvl of ['easy', 'medium', 'difficult']) {
+        const want = +$(lvl).value || 0, have = d.available[lvl];
+        const parts = Object.entries(d.marks_breakdown[lvl]).map(([m, c]) => c + '×' + m + 'm').join(', ') || '—';
+        html += `<tr class="${want > have ? 'bad' : ''}"><td><span class="tag ${lvl}">${lvl}</span></td><td>${have}</td><td>${want}</td><td><small>${esc(parts)}</small></td></tr>`;
+      }
+      html += '</tbody></table>';
+      html += `<p class="small">${d.setters} setter(s) and ${d.topics} topic(s) in the eligible pool.</p>`;
+      if (d.achievable_totals) {
+        const t = +$('total_marks').value || 0;
+        if (!d.achievable_totals.length) html += '<p class="bad">⚠ Not enough questions for this mix.</p>';
+        else {
+          const lo = d.achievable_totals[0], hi = d.achievable_totals[d.achievable_totals.length - 1];
+          html += `<p class="small">Achievable total marks with this mix: <strong>${lo}–${hi}</strong>`;
+          if (d.achievable_totals.length < 40) html += ' (' + d.achievable_totals.join(', ') + ')';
+          html += '</p>';
+          if (t && !d.achievable_totals.includes(t)) html += `<p class="bad">⚠ Exactly ${t} marks is not achievable with this mix.</p>`;
+          else if (t) html += `<p class="good">✔ ${t} marks is achievable.</p>`;
+        }
+      }
+      box.innerHTML = html;
+    }, 250);
+  }
+  ids.forEach(id => { $(id).addEventListener('input', refresh); $(id).addEventListener('change', refresh); });
+  refresh();
+})();
+</script>
+{% endblock %}

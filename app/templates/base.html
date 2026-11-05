@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Question Paper Generator{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}">📝 Question Paper Generator</a>
+  {% if current_user %}
+  <nav>
+    {% if current_user.role == 'admin' %}
+      <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('admin.review') }}">Review</a>
+      <a href="{{ url_for('admin.questions') }}">Question bank</a>
+      <a href="{{ url_for('admin.generate') }}">Generate</a>
+      <a href="{{ url_for('admin.papers') }}">Papers</a>
+      <a href="{{ url_for('admin.users') }}">Users</a>
+      <a href="{{ url_for('admin.audit') }}">Audit log</a>
+    {% else %}
+      <a href="{{ url_for('setter.dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('setter.questions') }}">My questions</a>
+      <a href="{{ url_for('setter.new_question') }}">Add question</a>
+      <a href="{{ url_for('setter.import_csv') }}">Import CSV</a>
+    {% endif %}
+  </nav>
+  <div class="who">
+    <span>{{ current_user.display_name }} <small class="badge">{{ current_user.role }}</small></span>
+    <a href="{{ url_for('auth.change_password') }}">Password</a>
+    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="link">Log out</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

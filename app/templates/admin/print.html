@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ p.code }} - {{ p.title }}{{ ' - Answer key' if show_key else ' - Set ' ~ set_label }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body>
+<div class="toolbar noprint">
+  <button onclick="window.print()">🖨 Print / Save as PDF</button>
+  {% if p.status != 'final' %}<span class="warn">This paper is a {{ p.status }} - finalise it before using it in an exam.</span>{% endif %}
+</div>
+{% if p.status != 'final' %}<div class="watermark">{{ p.status|upper }}</div>{% endif %}
+<header>
+  <h1>{{ p.title }}</h1>
+  <div class="meta">
+    <span>Subject: {{ p.subject }}</span>
+    <span>Time: {{ p.duration_minutes // 60 }}h {{ '%02d'|format(p.duration_minutes % 60) }}m</span>
+    <span>Maximum marks: {{ p.total_marks }}</span>
+  </div>
+  <div class="meta">
+    <span>Paper code: {{ p.code }}</span>
+    {% if p.num_sets > 1 %}<span><strong>SET {{ set_label }}</strong></span>{% endif %}
+    {% if show_key %}<span><strong>ANSWER KEY - CONFIDENTIAL</strong></span>{% endif %}
+  </div>
+  {% if not show_key %}
+  <div class="student">Name: ______________________________ &nbsp; Roll no.: ______________</div>
+  {% endif %}
+  {% if p.instructions and not show_key %}
+  <div class="instructions"><strong>Instructions</strong><div class="pre">{{ p.instructions }}</div></div>
+  {% endif %}
+</header>
+<ol class="questions">
+  {% for it in items %}
+  <li>
+    <div class="q"><div class="pre">{{ it.text }}</div><span class="marks">[{{ it.marks }}]</span></div>
+    {% if show_key %}
+      <div class="key"><small>{{ it.difficulty }} · {{ it.topic or 'no topic' }} · est. {{ it.est_minutes }} min</small>
+        <div class="pre">{{ it.answer or '(no model answer provided)' }}</div></div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ol>
+<footer>*** End of paper ***</footer>
+</body>
+</html>
