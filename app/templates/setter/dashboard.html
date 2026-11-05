@@ -23,7 +23,7 @@
   <h2>Needs your attention</h2>
   <ul>
   {% for q in rejected %}
-    <li><a href="{{ url_for('setter.edit_question', qid=q.id) }}">{{ q.text[:90] }}{% if q.text|length > 90 %}…{% endif %}</a>
+    <li><a href="{{ url_for('setter.edit_question', qid=q.id) }}">{{ q.text|plain|truncate(90) }}</a>
       — <em>{{ q.review_note or 'rejected' }}</em></li>
   {% endfor %}
   </ul>

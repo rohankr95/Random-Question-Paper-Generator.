@@ -59,7 +59,7 @@
     <thead><tr><th>#</th><th>Question</th><th>Topic</th><th>Level</th><th>Marks</th><th>Time</th></tr></thead>
     <tbody>
     {% for it in p.items %}
-      <tr><td>{{ loop.index }}</td><td class="qtext">{{ it.text }}</td><td>{{ it.topic }}</td><td>{{ diff_tag(it.difficulty) }}</td>
+      <tr><td>{{ loop.index }}</td><td class="qtext"><div class="rich">{{ it.text|rich }}</div></td><td>{{ it.topic }}</td><td>{{ diff_tag(it.difficulty) }}</td>
         <td>{{ it.marks }}</td><td>{{ it.est_minutes }}m</td></tr>
     {% endfor %}
     </tbody>

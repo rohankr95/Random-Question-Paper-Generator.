@@ -19,6 +19,7 @@ Built with Python + Flask + SQLite (or PostgreSQL). It has no build step and run
 |---|---|
 | Login per setter | The admin creates the accounts. Each setter can change their own password. |
 | Add / edit / delete questions | Text, subject, topic, difficulty, marks, estimated minutes and an optional model answer. |
+| Formatted text & tables | The question and answer boxes are rich-text editors: **bold**, *italic*, underline, super/subscript, lists, alignment, symbols and **tables**. Tables pasted from Excel, Word or Google Docs/Sheets keep their rows and columns. The server strips anything unsafe. |
 | CSV bulk import | See `samples/questions_sample.csv`. |
 | Duplicate detection | Warns when a new question is ≥85% similar to one already in the subject pool. The other setter's text is not shown. |
 | Review status | Each question is *pending*, *approved* or *rejected*, and a rejection comes with the reviewer's note. Approved questions are locked. |
@@ -153,11 +154,12 @@ app/
   models.py        User, Question, Paper, PaperQuestion, AuditLog
   generator.py     the fair random selection algorithm (pure Python, unit-tested)
   questions.py     validation, duplicate detection, CSV import
+  richtext.py      sanitising/rendering of formatted (HTML) question text
   auth.py          login, logout, first-time setup, change password
   setter.py        question-setter pages
   admin.py         admin pages: review, bank, users, generate, papers, audit
   templates/       Jinja templates
-  static/          CSS (screen + print)
+  static/          CSS (screen + print), editor.js (rich-text editor set-up)
 samples/           example CSV for bulk import
 tests/             pytest suite
 wsgi.py            WSGI entry point

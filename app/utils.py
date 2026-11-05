@@ -34,6 +34,10 @@ def init_app(app):
     # Globals (not context vars) so they also work inside imported macros.
     app.jinja_env.globals.update(csrf_token=csrf_token, DIFFICULTIES=DIFFICULTIES)
 
+    from .richtext import render, to_plain
+    app.jinja_env.filters["rich"] = render
+    app.jinja_env.filters["plain"] = to_plain
+
     @app.context_processor
     def inject():
         return {"current_user": g.get("user")}

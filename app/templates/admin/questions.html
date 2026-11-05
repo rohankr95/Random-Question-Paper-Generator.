@@ -18,7 +18,7 @@
   {% for q in items %}
   <tr>
     <td>{{ q.id }}</td>
-    <td class="qtext">{{ q.text }}</td>
+    <td class="qtext"><div class="rich">{{ q.text|rich }}</div></td>
     <td>{{ q.subject }}{% if q.topic %}<br><small class="muted">{{ q.topic }}</small>{% endif %}</td>
     <td>{{ diff_tag(q.difficulty) }}</td><td>{{ q.marks }}</td><td>{{ q.est_minutes }}m</td>
     <td>{{ q.setter.display_name }}</td>

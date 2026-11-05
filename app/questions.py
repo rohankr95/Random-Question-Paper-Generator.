@@ -4,6 +4,7 @@ import io
 from difflib import SequenceMatcher
 
 from .models import DIFFICULTIES, Question, db, normalize_text
+from .richtext import clean_input, render, to_plain
 from .utils import parse_int
 
 SIMILARITY_THRESHOLD = 0.85
@@ -37,8 +38,8 @@ def find_similar(text, subject, exclude_id=None):
 
 def parse_question_form(form):
     """Validate a question form. Returns a dict of clean values or raises ValueError."""
-    text = (form.get("text") or "").strip()
-    if len(text) < 5:
+    text = clean_input(form.get("text"))
+    if len(to_plain(text).strip()) < 5:
         raise ValueError("Question text is too short.")
     subject = (form.get("subject") or "").strip()
     if not subject:
@@ -53,7 +54,7 @@ def parse_question_form(form):
         "difficulty": difficulty,
         "marks": parse_int(form.get("marks"), "Marks", 1, 100),
         "est_minutes": parse_int(form.get("est_minutes"), "Estimated time", 1, 600),
-        "answer": (form.get("answer") or "").strip(),
+        "answer": clean_input(form.get("answer")),
     }
 
 
@@ -61,6 +62,14 @@ def apply_values(question, values):
     question.set_text(values["text"])
     for key in ("subject", "topic", "difficulty", "marks", "est_minutes", "answer"):
         setattr(question, key, values[key])
+
+
+def editor_form_values(q):
+    """Initial form values for editing an existing question in the rich-text editor."""
+    return {
+        "text": str(render(q.text)), "answer": str(render(q.answer)), "subject": q.subject,
+        "topic": q.topic, "difficulty": q.difficulty, "marks": q.marks, "est_minutes": q.est_minutes,
+    }
 
 
 def subjects():

@@ -9,6 +9,13 @@ ol.questions { padding-left: 1.6rem; }
 ol.questions li { margin-bottom: 1rem; page-break-inside: avoid; }
 .q { display: flex; justify-content: space-between; gap: 1rem; }
 .marks { white-space: nowrap; font-weight: bold; }
+.q .rich { flex: 1; min-width: 0; }
+.rich p { margin: 0 0 .4em; }
+.rich ul, .rich ol { margin: .2em 0 .4em; padding-left: 1.4em; }
+.rich table { border-collapse: collapse; margin: .4em 0; }
+.rich th, .rich td { border: 1px solid #000; padding: .2em .5em; vertical-align: top; }
+.rich th { font-weight: bold; }
+.rich tr { page-break-inside: avoid; }
 .key { margin-top: .3rem; padding: .4rem .6rem; border-left: 3px solid #888; background: #f4f4f4; }
 .key small { color: #555; }
 footer { text-align: center; margin-top: 2rem; }

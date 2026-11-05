@@ -12,8 +12,8 @@ Only approved questions can be drawn into papers.</p>
     {% for q in items %}
     <tr>
       <td><input type="checkbox" class="pick" name="ids" value="{{ q.id }}"></td>
-      <td class="qtext">{{ q.text }}
-        {% if q.answer %}<details><summary>Answer</summary><div class="pre">{{ q.answer }}</div></details>{% endif %}
+      <td class="qtext"><div class="rich">{{ q.text|rich }}</div>
+        {% if q.answer %}<details><summary>Answer</summary><div class="rich">{{ q.answer|rich }}</div></details>{% endif %}
         {% if hints[q.id] %}<div class="note warn">⚠ {{ '%.0f'|format(hints[q.id][1]*100) }}% similar to question #{{ hints[q.id][0] }}</div>{% endif %}
       </td>
       <td>{{ q.subject }}{% if q.topic %}<br><small class="muted">{{ q.topic }}</small>{% endif %}</td>
