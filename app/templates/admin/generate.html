@@ -55,7 +55,8 @@ fairness report and recorded in the audit log together with the random seed.</p>
   <h2>4. Include or exclude particular questions <small class="muted">(optional)</small></h2>
   <p class="small muted">By default every question is drawn at random. Choose <strong>Include</strong> to always put a question in
     this paper - it counts towards the number of questions for its level and towards the total marks.
-    Choose <strong>Exclude</strong> to keep a question out of this paper. Nothing about the question itself is changed.</p>
+    Choose <strong>Exclude</strong> to keep a question out of this paper. Tick <strong>⭐ 1st</strong> on one question to make it
+    question 1 in every set (it is included automatically). Nothing about the question itself is changed.</p>
   <div id="picker-empty" class="muted">Choose a subject to list its approved questions.</div>
   <div id="picker" hidden>
     <div class="filters">
@@ -65,9 +66,12 @@ fairness report and recorded in the audit log together with the random seed.</p>
       <span id="pk-summary" class="small"></span>
       <button type="button" class="btn" id="pk-clear">Reset all to random</button>
     </div>
+    <p class="small first-line">⭐ Question 1 in every set: <strong id="pk-first-label">none - order is random</strong>
+      <button type="button" class="link" id="pk-first-clear" hidden>clear</button>
+      <input type="hidden" name="first_question" id="first_question" value="{{ first_id or '' }}"></p>
     <div class="picker-scroll">
       <table class="list picker">
-        <thead><tr><th>#</th><th>Question</th><th>Topic</th><th>Level</th><th>Marks</th><th>Time</th><th>Used</th><th>Choice</th></tr></thead>
+        <thead><tr><th>#</th><th>Question</th><th>Topic</th><th>Level</th><th>Marks</th><th>Time</th><th>Used</th><th>Choice</th><th title="Question 1 in every set">⭐ 1st</th></tr></thead>
         <tbody id="pk-body"></tbody>
       </table>
     </div>
@@ -86,6 +90,7 @@ fairness report and recorded in the audit log together with the random seed.</p>
   const $ = id => document.getElementById(id);
   const LEVELS = ['easy', 'medium', 'difficult'];
   let picks = {{ picks|tojson }};   // {questionId: "include" | "exclude"}
+  let firstId = {{ (first_id|string if first_id else '')|tojson }};  // question that is no. 1 in every set
   let questions = [], eligible = null, loadedSubject = null, timer;
   function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   const idsWith = v => Object.keys(picks).filter(k => picks[k] === v);
@@ -144,7 +149,7 @@ fairness report and recorded in the audit log together with the random seed.</p>
   async function loadQuestions() {
     const subject = $('subject').value;
     if (subject === loadedSubject) return;
-    if (loadedSubject !== null) picks = {};   // a different subject: start again
+    if (loadedSubject !== null) { picks = {}; firstId = ''; }   // a different subject: start again
     loadedSubject = subject;
     questions = [];
     if (!subject) { $('picker').hidden = true; $('picker-empty').hidden = false; return; }
@@ -173,9 +178,12 @@ fairness report and recorded in the audit log together with the random seed.</p>
           <label><input type="radio" name="pick_${x.id}" value="" ${choice === '' ? 'checked' : ''}>Random</label>
           <label><input type="radio" name="pick_${x.id}" value="include" ${choice === 'include' ? 'checked' : ''}>Include</label>
           <label><input type="radio" name="pick_${x.id}" value="exclude" ${choice === 'exclude' ? 'checked' : ''}>Exclude</label>
-        </td></tr>`);
+        </td>
+        <td class="first-cell"><input type="radio" name="first_pick" value="${x.id}" ${String(x.id) === firstId ? 'checked' : ''}
+            title="Make this question 1 in every set"></td></tr>`);
     }
-    $('pk-body').innerHTML = rows.join('') || '<tr><td colspan="8" class="muted">No questions match.</td></tr>';
+    $('pk-body').innerHTML = rows.join('') || '<tr><td colspan="9" class="muted">No questions match.</td></tr>';
+    showFirst();
     const inc = idsWith('include').length, exc = idsWith('exclude').length;
     $('pk-summary').textContent = `${questions.length} approved · 📌 ${inc} included · 🚫 ${exc} excluded`;
     syncHidden();
@@ -191,17 +199,29 @@ fairness report and recorded in the audit log together with the random seed.</p>
       $('genform').appendChild(h);
     }
   }
+  function showFirst() {
+    $('first_question').value = firstId;
+    const q = questions.find(x => String(x.id) === firstId);
+    $('pk-first-label').textContent = firstId ? ('#' + firstId + (q ? ' - ' + q.text.slice(0, 70) + (q.text.length > 70 ? '…' : '') : ''))
+                                              : 'none - order is random';
+    $('pk-first-clear').hidden = !firstId;
+  }
+  $('pk-first-clear').addEventListener('click', () => { firstId = ''; renderPicker(); refresh(); });
   $('pk-body').addEventListener('change', e => {
+    if (e.target.name === 'first_pick') {   // the first question is always included
+      firstId = e.target.value; picks[firstId] = 'include'; renderPicker(); refresh(); return;
+    }
     const m = e.target.name && e.target.name.match(/^pick_(\d+)$/);
     if (!m) return;
     if (e.target.value) picks[m[1]] = e.target.value; else delete picks[m[1]];
+    if (m[1] === firstId && e.target.value !== 'include') { firstId = ''; renderPicker(); }
     const tr = e.target.closest('tr'); tr.className = e.target.value ? 'pick-' + e.target.value : '';
     const inc = idsWith('include').length, exc = idsWith('exclude').length;
     $('pk-summary').textContent = `${questions.length} approved · 📌 ${inc} included · 🚫 ${exc} excluded`;
     refresh();
   });
   ['pk-search', 'pk-level', 'pk-show'].forEach(id => $(id).addEventListener('input', renderPicker));
-  $('pk-clear').addEventListener('click', () => { picks = {}; renderPicker(); refresh(); });
+  $('pk-clear').addEventListener('click', () => { picks = {}; firstId = ''; renderPicker(); refresh(); });
 
   ['subject', 'exclude_recent', 'fresh_only', 'easy', 'medium', 'difficult', 'total_marks'].forEach(id => {
     $(id).addEventListener('input', refresh); $(id).addEventListener('change', refresh);

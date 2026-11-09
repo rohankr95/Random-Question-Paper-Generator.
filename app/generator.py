@@ -158,7 +158,7 @@ def _weighted_pick(rng, items, weight_fn):
     return len(items) - 1
 
 
-def select_questions(pool, counts, total_marks=None, *, seed=None, forced=(),
+def select_questions(pool, counts, total_marks=None, *, seed=None, forced=(), first_id=None,
                      balance_setters=True, cover_topics=True, order="difficulty"):
     """Pick questions for one paper.
 
@@ -167,6 +167,7 @@ def select_questions(pool, counts, total_marks=None, *, seed=None, forced=(),
     total_marks  -- exact total required, or None for "whatever the questions add up to"
     forced       -- Candidates the admin chose to always include. They count towards the
                     difficulty counts and the total marks; the rest is drawn at random.
+    first_id     -- id of a forced question that must be question 1 (in every set)
     order        -- "difficulty" (easy -> difficult, shuffled inside each level) or "random"
     """
     seed = seed or new_seed()
@@ -254,7 +255,20 @@ def select_questions(pool, counts, total_marks=None, *, seed=None, forced=(),
         chosen.append(pick)
 
     chosen = order_questions(chosen, rng, order)
+    if first_id is not None:
+        if first_id not in {c.id for c in forced}:
+            raise GenerationError("The question chosen to be first must also be included in the paper.")
+        chosen = put_first(chosen, lambda c: c.id, first_id)
     return Selection(seed=seed, questions=chosen)
+
+
+def put_first(items, id_key, first_id):
+    """Move the item whose id is ``first_id`` to the front, keeping the others in order."""
+    items = list(items)
+    for i, it in enumerate(items):
+        if id_key(it) == first_id:
+            return [items[i]] + items[:i] + items[i + 1:]
+    return items
 
 
 def _apply_forced(forced, requested, total_marks):
@@ -337,20 +351,24 @@ def order_questions(questions, rng, order="difficulty"):
     return questions
 
 
-def shuffled_set(items, seed, set_index, difficulty_key, order="difficulty"):
+def shuffled_set(items, seed, set_index, difficulty_key, order="difficulty", first_id=None, id_key=None):
     """Deterministic alternate ordering for Set B, C, ... (Set A = index 0 = original order).
 
     Every set contains exactly the same questions; only the order changes, and when
     ``order == "difficulty"`` each set still goes easy -> medium -> difficult.
+    If ``first_id`` is given, that question is question 1 in every set.
     """
     if set_index == 0:
-        return list(items)
+        items = list(items)
+        return put_first(items, id_key, first_id) if first_id is not None else items
     rng = random.Random(f"{seed}:{set_index}")
     items = list(items)
     rng.shuffle(items)
     if order == "difficulty":
         rank = {d: i for i, d in enumerate(DIFFICULTY_ORDER)}
         items.sort(key=lambda it: rank.get(difficulty_key(it), 99))
+    if first_id is not None:
+        items = put_first(items, id_key, first_id)
     return items
 
 

@@ -120,6 +120,10 @@ tr.pick-exclude td.qtext { text-decoration: line-through; color: var(--muted); }
 .marker { display: inline-block; font-size: .75rem; font-weight: 600; padding: .05rem .45rem; border-radius: 99px;
   border: 1px solid var(--border); margin-left: .3rem; white-space: nowrap; }
 form.swap { display: inline; }
+.marker.first { border-color: var(--medium); color: var(--medium); }
+td.first-cell { text-align: center; }
+td.first-cell input { width: auto; margin: 0; }
+.first-line { margin: 0 0 .6rem; }
 .edit-details { margin-top: .8rem; }
 .edit-details summary { color: var(--primary); }
 .edit-details form { margin-top: .8rem; }

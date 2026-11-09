@@ -37,6 +37,10 @@ Built with Python + Flask + SQLite (or PostgreSQL). It has no build step and run
 | Fairness report | Marks and time per difficulty, estimated time compared with exam duration, setter and topic coverage, and how many questions are fresh. |
 | Draft → Final / Discard | Finalising marks the questions as used. A discard needs a reason, and discarded papers stay in the history. |
 | Multiple sets (A–F) | Same questions in a different order, which discourages copying. Each set has its own answer key. |
+| Include / exclude questions | When generating, mark any approved question **Include** (always in the paper; it counts towards the level counts and total marks) or **Exclude** (kept out of this paper). The choices are flagged 📌 on the paper, shown in the fairness report and logged. Questions in the bank are never modified. |
+| Fixed first question | Tick ⭐ **1st** on one question when generating (or **⭐ Make 1st** on a draft) and it becomes question 1 in **every** set (A, B, C…). The rest of each set is still shuffled. |
+| Swap a question (drafts) | Replace one question in a draft with another *randomly drawn* question of the same difficulty and marks. The total stays the same, and the swap and reason are logged. |
+| Formatted instructions | The paper instructions use the same rich-text editor (bold, lists, tables...). The title, duration and instructions can be edited while the paper is a draft. |
 | Print / PDF | A clean printable paper (use the browser's *Save as PDF*). Drafts carry a "DRAFT" watermark. |
 | Audit log | Records logins, reviews, every generation with its random seed, finalisations, discards and prints. |
 

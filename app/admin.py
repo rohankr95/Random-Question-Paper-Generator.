@@ -237,9 +237,16 @@ def _read_generate_form(form):
         "instructions": clean_input(form.get("instructions")),
         "include_ids": sorted(_picked_ids(form, "include")),
         "exclude_ids": sorted(_picked_ids(form, "exclude")),
+        "first_id": None,
     }
     if not cfg["subject"]:
         raise ValueError("Choose a subject.")
+    first = (form.get("first_question") or "").strip()
+    if first.isdigit():
+        # The first question is always part of the paper.
+        cfg["first_id"] = int(first)
+        cfg["include_ids"] = sorted(set(cfg["include_ids"]) | {cfg["first_id"]})
+        cfg["exclude_ids"] = [i for i in cfg["exclude_ids"] if i != cfg["first_id"]]
     return cfg
 
 
@@ -350,7 +357,7 @@ def generate():
             counts = {d: cfg[d] for d in DIFFICULTIES}
             selection = generator.select_questions(
                 [_to_candidate(q) for q in pool], counts, cfg["total_marks"] or None,
-                forced=[_to_candidate(q) for q in forced],
+                forced=[_to_candidate(q) for q in forced], first_id=cfg["first_id"],
                 balance_setters=cfg["balance_setters"], cover_topics=cfg["cover_topics"], order=cfg["order"],
             )
         except (ValueError, generator.GenerationError) as exc:
@@ -379,6 +386,8 @@ def generate():
         if cfg["include_ids"] or cfg["exclude_ids"]:
             manual = (" included=" + ",".join(f"Q{i}" for i in cfg["include_ids"])
                       + " excluded=" + ",".join(f"Q{i}" for i in cfg["exclude_ids"]))
+        if cfg["first_id"]:
+            manual += f" first=Q{cfg['first_id']}"
         log(g.user, "paper_generate",
             f"{paper.code} '{paper.title}' seed={paper.seed} questions={len(chosen)} marks={total}{manual} "
             f"(unfinalised drafts/discards for this subject: {attempts})")
@@ -393,7 +402,9 @@ def _render_generate(form):
     for key, value in form.items():
         if key.startswith("pick_") and key[5:].isdigit() and value in ("include", "exclude"):
             picks[key[5:]] = value
-    return render_template("admin/generate.html", form=form, subjects=subjects(), picks=picks)
+    first = (form.get("first_question") or "").strip()
+    return render_template("admin/generate.html", form=form, subjects=subjects(), picks=picks,
+                           first_id=int(first) if first.isdigit() else None)
 
 
 def _build_report(questions, cfg, pool_size):
@@ -440,6 +451,7 @@ def paper(pid):
     replaced_new = {r["new"] for r in cfg.get("replaced") or []}
     return render_template("admin/paper.html", p=p, report=p.report, cfg=cfg,
                            included=set(cfg.get("include_ids") or []), replaced_new=replaced_new,
+                           first_id=cfg.get("first_id"),
                            instructions_html=str(render(p.instructions)))
 
 
@@ -475,6 +487,33 @@ def _refresh_report(p, cfg):
     p.report_json = json.dumps(_build_report(questions, cfg, pool_size=p.report.get("pool_size", 0)))
 
 
+@bp.route("/papers/<int:pid>/first", methods=["POST"])
+@role_required("admin")
+def set_first_question(pid):
+    """Choose (or clear) the question that is question 1 in every set of a draft paper."""
+    p = db.session.get(Paper, pid) or abort(404)
+    if p.status != "draft":
+        flash("The first question can only be changed while the paper is a draft.", "warning")
+        return redirect(url_for("admin.paper", pid=p.id))
+    cfg = p.config
+    raw = request.form.get("item", "")
+    if raw == "none":
+        cfg["first_id"] = None
+        log(g.user, "paper_first_question", f"{p.code}: cleared")
+        flash("No question is fixed as first any more.", "info")
+    else:
+        item = next((it for it in p.items if str(it.id) == raw), None) or abort(404)
+        cfg["first_id"] = item.question_id
+        ordered = generator.put_first(list(p.items), lambda it: it.id, item.id)
+        for pos, it in enumerate(ordered, start=1):
+            it.position = pos
+        log(g.user, "paper_first_question", f"{p.code}: Q{item.question_id}")
+        flash("That question is now question 1 in every set.", "success")
+    p.config_json = json.dumps(cfg)
+    db.session.commit()
+    return redirect(url_for("admin.paper", pid=p.id))
+
+
 @bp.route("/papers/<int:pid>/items/<int:iid>/replace", methods=["POST"])
 @role_required("admin")
 def replace_question(pid, iid):
@@ -505,6 +544,8 @@ def replace_question(pid, iid):
     # The swapped-out question stays out of this paper's pool if it is swapped again.
     cfg["exclude_ids"] = sorted(set(cfg.get("exclude_ids") or []) | {old_id})
     cfg["include_ids"] = [i for i in cfg.get("include_ids") or [] if i != old_id]
+    if cfg.get("first_id") == old_id:
+        cfg["first_id"] = q.id  # the swapped-in question takes over the "first in every set" slot
     cfg.setdefault("replaced", []).append({"old": old_id, "new": q.id, "seed": seed, "reason": reason})
     p.config_json = json.dumps(cfg)
     _refresh_report(p, cfg)
@@ -561,7 +602,8 @@ def print_paper(pid):
     raw = request.args.get("set", "0")
     set_index = min(int(raw), p.num_sets - 1) if raw.isdigit() else 0
     items = generator.shuffled_set(p.items, p.seed, set_index, lambda it: it.difficulty,
-                                   p.config.get("order", "difficulty"))
+                                   p.config.get("order", "difficulty"),
+                                   first_id=p.config.get("first_id"), id_key=lambda it: it.question_id)
     show_key = request.args.get("key") == "1"
     log(g.user, "paper_print", f"{p.code} set={chr(65 + set_index)} key={show_key}")
     db.session.commit()
