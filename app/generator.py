@@ -158,13 +158,15 @@ def _weighted_pick(rng, items, weight_fn):
     return len(items) - 1
 
 
-def select_questions(pool, counts, total_marks=None, *, seed=None,
+def select_questions(pool, counts, total_marks=None, *, seed=None, forced=(),
                      balance_setters=True, cover_topics=True, order="difficulty"):
     """Pick questions for one paper.
 
     pool         -- iterable of Candidate
     counts       -- {"easy": n, "medium": n, "difficult": n}
     total_marks  -- exact total required, or None for "whatever the questions add up to"
+    forced       -- Candidates the admin chose to always include. They count towards the
+                    difficulty counts and the total marks; the rest is drawn at random.
     order        -- "difficulty" (easy -> difficult, shuffled inside each level) or "random"
     """
     seed = seed or new_seed()
@@ -177,26 +179,31 @@ def select_questions(pool, counts, total_marks=None, *, seed=None,
     if sum(requested.values()) == 0:
         raise GenerationError("Ask for at least one question.")
 
+    forced, draw, target = _apply_forced(forced, requested, total_marks)
+    forced_ids = {c.id for c in forced}
+    forced_marks = sum(c.marks for c in forced)
+    pool = [c for c in pool if c.id not in forced_ids]
+
     by_diff = {d: [c for c in pool if c.difficulty == d] for d in DIFFICULTY_ORDER}
-    short = [f"{d}: need {requested[d]}, only {len(by_diff[d])} available"
-             for d in DIFFICULTY_ORDER if requested[d] > len(by_diff[d])]
+    short = [f"{d}: need {draw[d]} more, only {len(by_diff[d])} available"
+             for d in DIFFICULTY_ORDER if draw[d] > len(by_diff[d])]
     if short:
         raise GenerationError("Not enough approved questions in the pool - " + "; ".join(short) + ".")
 
     # Decide how many questions of each marks value are needed per difficulty.
     plan_counts = {}  # difficulty -> {marks_value: n} or None (any marks)
-    if total_marks:
-        plans = {d: _DifficultyPlan(by_diff[d], requested[d]) for d in DIFFICULTY_ORDER}
+    if target is not None:
+        plans = {d: _DifficultyPlan(by_diff[d], draw[d]) for d in DIFFICULTY_ORDER}
         e_ways, m_ways, h_ways = (plans[d].ways for d in DIFFICULTY_ORDER)
         triples = []
         for se, we in e_ways.items():
             for sm, wm in m_ways.items():
-                sh = total_marks - se - sm
+                sh = target - se - sm
                 wh = h_ways.get(sh)
                 if wh:
                     triples.append(((se, sm, sh), we * wm * wh))
         if not triples:
-            reachable = achievable_totals(pool, requested)
+            reachable = [t + forced_marks for t in achievable_totals(pool, draw)]
             if reachable:
                 near = sorted(reachable, key=lambda t: (abs(t - total_marks), t))[:6]
                 hint = "Closest achievable totals: " + ", ".join(map(str, sorted(near))) + "."
@@ -204,7 +211,8 @@ def select_questions(pool, counts, total_marks=None, *, seed=None,
                 hint = "No total is achievable with this pool."
             raise GenerationError(
                 f"No combination of {requested['easy']} easy, {requested['medium']} medium and "
-                f"{requested['difficult']} difficult questions adds up to exactly {total_marks} marks. "
+                f"{requested['difficult']} difficult questions adds up to exactly {total_marks} marks"
+                + (f" (including the {len(forced)} question(s) you chose to always include). " if forced else ". ")
                 + hint
             )
         sums = _sample_proportional(rng, triples)
@@ -218,7 +226,7 @@ def select_questions(pool, counts, total_marks=None, *, seed=None,
     slots = []
     for d in DIFFICULTY_ORDER:
         if plan_counts[d] is None:
-            slots += [(d, None)] * requested[d]
+            slots += [(d, None)] * draw[d]
         else:
             for value, n in plan_counts[d].items():
                 slots += [(d, value)] * n
@@ -227,8 +235,10 @@ def select_questions(pool, counts, total_marks=None, *, seed=None,
     remaining = {d: list(by_diff[d]) for d in DIFFICULTY_ORDER}
     for d in remaining:
         rng.shuffle(remaining[d])  # break ties between identical weights randomly
-    setter_picks, topic_picks = Counter(), Counter()
-    chosen = []
+    # Questions included by the admin already "use up" their setter and topic.
+    setter_picks = Counter(c.setter_id for c in forced)
+    topic_picks = Counter(c.topic.lower() for c in forced if c.topic)
+    chosen = list(forced)
     for d, value in slots:
         items = [c for c in remaining[d] if value is None or c.marks == value]
         setter_sizes = Counter(c.setter_id for c in items)
@@ -245,6 +255,77 @@ def select_questions(pool, counts, total_marks=None, *, seed=None,
 
     chosen = order_questions(chosen, rng, order)
     return Selection(seed=seed, questions=chosen)
+
+
+def _apply_forced(forced, requested, total_marks):
+    """Check the always-include list against the blueprint.
+
+    Returns (forced, how many still to draw per difficulty, marks still to fill or None).
+    """
+    forced = list({c.id: c for c in forced}.values())
+    per_level = Counter(c.difficulty for c in forced)
+    over = [f"{per_level[d]} {d} (the blueprint asks for {requested[d]})"
+            for d in DIFFICULTY_ORDER if per_level[d] > requested[d]]
+    if over:
+        raise GenerationError(
+            "You chose to always include more questions than the blueprint allows: " + ", ".join(over)
+            + ". Increase the number of questions for that level or include fewer questions."
+        )
+    draw = {d: requested[d] - per_level[d] for d in DIFFICULTY_ORDER}
+    target = None
+    if total_marks:
+        forced_marks = sum(c.marks for c in forced)
+        target = total_marks - forced_marks
+        if target < 0:
+            raise GenerationError(
+                f"The questions you chose to always include already add up to {forced_marks} marks, "
+                f"more than the paper total of {total_marks}."
+            )
+    return forced, draw, target
+
+
+def blueprint_totals(pool, counts, forced=()):
+    """Achievable totals for a blueprint once the always-include questions are taken into account.
+
+    Returns (totals, error_message_or_None).
+    """
+    requested = {d: int(counts.get(d, 0) or 0) for d in DIFFICULTY_ORDER}
+    try:
+        forced, draw, _ = _apply_forced(forced, requested, None)
+    except GenerationError as exc:
+        return [], str(exc)
+    forced_ids = {c.id for c in forced}
+    rest = [c for c in pool if c.id not in forced_ids]
+    marks = sum(c.marks for c in forced)
+    return [t + marks for t in achievable_totals(rest, draw)], None
+
+
+def pick_replacement(pool, current, old, *, seed=None, balance_setters=True, cover_topics=True):
+    """Randomly pick a question to replace ``old`` in a draft paper.
+
+    The replacement has the same difficulty and the same marks, so the paper's blueprint
+    and total do not change. ``current`` is the list of Candidates now in the paper.
+    Returns (candidate, seed) or raises GenerationError.
+    """
+    seed = seed or new_seed()
+    rng = random.Random(seed)
+    in_paper = {c.id for c in current}
+    items = [c for c in pool if c.id not in in_paper and c.difficulty == old.difficulty and c.marks == old.marks]
+    if not items:
+        raise GenerationError(
+            f"There is no other approved {old.difficulty} question worth {old.marks} mark(s) available "
+            "for this subject, so this question cannot be swapped without changing the blueprint."
+        )
+    rng.shuffle(items)
+    others = [c for c in current if c.id != old.id]
+    setter_picks = Counter(c.setter_id for c in others)
+    topic_picks = Counter(c.topic.lower() for c in others if c.topic)
+    setter_sizes = Counter(c.setter_id for c in items)
+    idx = _weighted_pick(
+        rng, items,
+        lambda c: _weight(c, setter_picks, topic_picks, balance_setters, cover_topics, setter_sizes),
+    )
+    return items[idx], seed
 
 
 def order_questions(questions, rng, order="difficulty"):

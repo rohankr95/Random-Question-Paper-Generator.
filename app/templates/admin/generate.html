@@ -1,8 +1,9 @@
 {% extends "base.html" %}{% from "_macros.html" import csrf %}
 {% block content %}
 <h1>Generate a question paper</h1>
-<p class="muted">Set the blueprint and click <strong>Generate</strong>. Questions are drawn at random from the approved pool -
-nobody (including the admin) can hand-pick them. Every generation is recorded in the audit log with its random seed.</p>
+<p class="muted">Set the blueprint and click <strong>Generate</strong>. Questions are drawn at random from the approved pool.
+If you need to, you can always include or exclude particular questions (step 4); those choices are shown on the paper's
+fairness report and recorded in the audit log together with the random seed.</p>
 <form method="post" id="genform">{{ csrf() }}
 <div class="cols">
   <div class="card">
@@ -26,8 +27,11 @@ nobody (including the admin) can hand-pick them. Every generation is recorded in
       <label><span class="tag medium">medium</span> questions <input type="number" class="cnt" name="medium" id="medium" min="0" value="{{ form.get('medium', 0) }}"></label>
       <label><span class="tag difficult">difficult</span> questions <input type="number" class="cnt" name="difficult" id="difficult" min="0" value="{{ form.get('difficult', 0) }}"></label>
     </div>
-    <label>Instructions printed on the paper
-      <textarea name="instructions" rows="3">{{ form.get('instructions', '') }}</textarea></label>
+    <div class="field">
+      <label for="instructions">Instructions printed on the paper</label>
+      <p class="hint">Format with bold, lists, tables, etc. You can still edit this after generating, while the paper is a draft.</p>
+      <textarea id="instructions" name="instructions" rows="4" data-rich data-height="200">{{ form.get('instructions', '') }}</textarea>
+    </div>
   </div>
   <div class="card">
     <h2>3. Fairness options</h2>
@@ -47,6 +51,28 @@ nobody (including the admin) can hand-pick them. Every generation is recorded in
     <div id="poolinfo" class="muted">Choose a subject to see what the pool can support.</div>
   </div>
 </div>
+<div class="card" id="picker-card">
+  <h2>4. Include or exclude particular questions <small class="muted">(optional)</small></h2>
+  <p class="small muted">By default every question is drawn at random. Choose <strong>Include</strong> to always put a question in
+    this paper - it counts towards the number of questions for its level and towards the total marks.
+    Choose <strong>Exclude</strong> to keep a question out of this paper. Nothing about the question itself is changed.</p>
+  <div id="picker-empty" class="muted">Choose a subject to list its approved questions.</div>
+  <div id="picker" hidden>
+    <div class="filters">
+      <input id="pk-search" placeholder="Search question text or topic">
+      <select id="pk-level"><option value="">All levels</option>{% for d in DIFFICULTIES %}<option value="{{ d }}">{{ d|capitalize }}</option>{% endfor %}</select>
+      <select id="pk-show"><option value="">Show all</option><option value="include">Only included</option><option value="exclude">Only excluded</option></select>
+      <span id="pk-summary" class="small"></span>
+      <button type="button" class="btn" id="pk-clear">Reset all to random</button>
+    </div>
+    <div class="picker-scroll">
+      <table class="list picker">
+        <thead><tr><th>#</th><th>Question</th><th>Topic</th><th>Level</th><th>Marks</th><th>Time</th><th>Used</th><th>Choice</th></tr></thead>
+        <tbody id="pk-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 <div class="generate-bar">
   <span id="summary"></span>
   <button class="btn primary big">⚡ Generate question paper</button>
@@ -54,35 +80,51 @@ nobody (including the admin) can hand-pick them. Every generation is recorded in
 </form>
 {% endblock %}
 {% block scripts %}
+{% include "_editor.html" %}
 <script>
 (function () {
   const $ = id => document.getElementById(id);
-  const ids = ['subject', 'exclude_recent', 'fresh_only', 'easy', 'medium', 'difficult', 'total_marks'];
-  let timer;
-  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  const LEVELS = ['easy', 'medium', 'difficult'];
+  let picks = {{ picks|tojson }};   // {questionId: "include" | "exclude"}
+  let questions = [], eligible = null, loadedSubject = null, timer;
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  const idsWith = v => Object.keys(picks).filter(k => picks[k] === v);
+
+  // ---------- pool check ----------
   function refresh() {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const box = $('poolinfo');
       const subject = $('subject').value;
-      const n = ['easy', 'medium', 'difficult'].reduce((a, d) => a + (+$(d).value || 0), 0);
+      const n = LEVELS.reduce((a, d) => a + (+$(d).value || 0), 0);
       $('summary').textContent = n ? n + ' question(s)' + ($('total_marks').value ? ', ' + $('total_marks').value + ' marks' : '') : '';
       if (!subject) { box.textContent = 'Choose a subject to see what the pool can support.'; return; }
       const p = new URLSearchParams({subject, exclude_recent: $('exclude_recent').value || 0,
-        easy: $('easy').value || 0, medium: $('medium').value || 0, difficult: $('difficult').value || 0});
+        easy: $('easy').value || 0, medium: $('medium').value || 0, difficult: $('difficult').value || 0,
+        include: idsWith('include').join(','), exclude: idsWith('exclude').join(',')});
       if ($('fresh_only').checked) p.set('fresh_only', '1');
       const r = await fetch('{{ url_for("admin.pool_info") }}?' + p);
       if (!r.ok) { box.textContent = 'Could not load pool info.'; return; }
       const d = await r.json();
-      let html = '<table><thead><tr><th>Level</th><th>Available</th><th>Requested</th><th>By marks</th></tr></thead><tbody>';
-      for (const lvl of ['easy', 'medium', 'difficult']) {
-        const want = +$(lvl).value || 0, have = d.available[lvl];
+      eligible = new Set(d.eligible_ids);
+      renderPicker();
+      const anyInc = LEVELS.some(l => d.included[l]);
+      let html = '<table><thead><tr><th>Level</th><th>Random pool</th>' + (anyInc ? '<th>Included</th>' : '') +
+                 '<th>Requested</th><th>By marks</th></tr></thead><tbody>';
+      for (const lvl of LEVELS) {
+        const want = +$(lvl).value || 0, have = d.available[lvl], inc = d.included[lvl];
         const parts = Object.entries(d.marks_breakdown[lvl]).map(([m, c]) => c + '×' + m + 'm').join(', ') || '—';
-        html += `<tr class="${want > have ? 'bad' : ''}"><td><span class="tag ${lvl}">${lvl}</span></td><td>${have}</td><td>${want}</td><td><small>${esc(parts)}</small></td></tr>`;
+        const bad = want > have + inc || inc > want;
+        html += `<tr class="${bad ? 'bad' : ''}"><td><span class="tag ${lvl}">${lvl}</span></td><td>${have}</td>` +
+                (anyInc ? `<td>${inc}</td>` : '') + `<td>${want}</td><td><small>${esc(parts)}</small></td></tr>`;
       }
       html += '</tbody></table>';
-      html += `<p class="small">${d.setters} setter(s) and ${d.topics} topic(s) in the eligible pool.</p>`;
-      if (d.achievable_totals) {
+      html += `<p class="small">${d.setters} setter(s) and ${d.topics} topic(s) in the random pool.`;
+      if (anyInc) html += ` Included questions: ${d.included_marks} marks.`;
+      if (d.excluded) html += ` ${d.excluded} question(s) excluded.`;
+      html += '</p>';
+      if (d.blueprint_error) html += `<p class="bad">⚠ ${esc(d.blueprint_error)}</p>`;
+      else if (d.achievable_totals) {
         const t = +$('total_marks').value || 0;
         if (!d.achievable_totals.length) html += '<p class="bad">⚠ Not enough questions for this mix.</p>';
         else {
@@ -97,8 +139,75 @@ nobody (including the admin) can hand-pick them. Every generation is recorded in
       box.innerHTML = html;
     }, 250);
   }
-  ids.forEach(id => { $(id).addEventListener('input', refresh); $(id).addEventListener('change', refresh); });
-  refresh();
+
+  // ---------- include / exclude picker ----------
+  async function loadQuestions() {
+    const subject = $('subject').value;
+    if (subject === loadedSubject) return;
+    if (loadedSubject !== null) picks = {};   // a different subject: start again
+    loadedSubject = subject;
+    questions = [];
+    if (!subject) { $('picker').hidden = true; $('picker-empty').hidden = false; return; }
+    const r = await fetch('{{ url_for("admin.pool_questions") }}?' + new URLSearchParams({subject}));
+    questions = r.ok ? await r.json() : [];
+    $('picker').hidden = false; $('picker-empty').hidden = true;
+    renderPicker();
+  }
+  function renderPicker() {
+    if ($('picker').hidden) return;
+    const q = $('pk-search').value.trim().toLowerCase(), lvl = $('pk-level').value, show = $('pk-show').value;
+    const rows = [];
+    for (const x of questions) {
+      const choice = picks[x.id] || '';
+      if (lvl && x.difficulty !== lvl) continue;
+      if (show && choice !== show) continue;
+      if (q && !(x.text.toLowerCase().includes(q) || (x.topic || '').toLowerCase().includes(q) || String(x.id) === q)) continue;
+      const notInPool = eligible && !eligible.has(x.id);
+      rows.push(`<tr class="${choice ? 'pick-' + choice : ''}">
+        <td>${x.id}</td>
+        <td class="qtext">${esc(x.text)}${x.text.length >= 220 ? '…' : ''}${x.has_table ? ' <span class="badge">table</span>' : ''}
+          ${notInPool ? '<div class="note warn">Not in the random draw (recently used / fairness options) - can still be included.</div>' : ''}</td>
+        <td>${esc(x.topic || '')}</td><td><span class="tag ${x.difficulty}">${x.difficulty}</span></td>
+        <td>${x.marks}</td><td>${x.minutes}m</td><td>${x.used}×</td>
+        <td class="nowrap seg">
+          <label><input type="radio" name="pick_${x.id}" value="" ${choice === '' ? 'checked' : ''}>Random</label>
+          <label><input type="radio" name="pick_${x.id}" value="include" ${choice === 'include' ? 'checked' : ''}>Include</label>
+          <label><input type="radio" name="pick_${x.id}" value="exclude" ${choice === 'exclude' ? 'checked' : ''}>Exclude</label>
+        </td></tr>`);
+    }
+    $('pk-body').innerHTML = rows.join('') || '<tr><td colspan="8" class="muted">No questions match.</td></tr>';
+    const inc = idsWith('include').length, exc = idsWith('exclude').length;
+    $('pk-summary').textContent = `${questions.length} approved · 📌 ${inc} included · 🚫 ${exc} excluded`;
+    syncHidden();
+  }
+  // Rows hidden by the filters are not in the DOM, so carry every choice in hidden inputs.
+  function syncHidden() {
+    document.querySelectorAll('input.pick-hidden').forEach(e => e.remove());
+    const shown = new Set([...document.querySelectorAll('#pk-body input[type=radio]')].map(r => r.name));
+    for (const [id, v] of Object.entries(picks)) {
+      if (shown.has('pick_' + id)) continue;
+      const h = document.createElement('input');
+      Object.assign(h, {type: 'hidden', name: 'pick_' + id, value: v, className: 'pick-hidden'});
+      $('genform').appendChild(h);
+    }
+  }
+  $('pk-body').addEventListener('change', e => {
+    const m = e.target.name && e.target.name.match(/^pick_(\d+)$/);
+    if (!m) return;
+    if (e.target.value) picks[m[1]] = e.target.value; else delete picks[m[1]];
+    const tr = e.target.closest('tr'); tr.className = e.target.value ? 'pick-' + e.target.value : '';
+    const inc = idsWith('include').length, exc = idsWith('exclude').length;
+    $('pk-summary').textContent = `${questions.length} approved · 📌 ${inc} included · 🚫 ${exc} excluded`;
+    refresh();
+  });
+  ['pk-search', 'pk-level', 'pk-show'].forEach(id => $(id).addEventListener('input', renderPicker));
+  $('pk-clear').addEventListener('click', () => { picks = {}; renderPicker(); refresh(); });
+
+  ['subject', 'exclude_recent', 'fresh_only', 'easy', 'medium', 'difficult', 'total_marks'].forEach(id => {
+    $(id).addEventListener('input', refresh); $(id).addEventListener('change', refresh);
+  });
+  $('subject').addEventListener('change', () => loadQuestions().then(refresh));
+  loadQuestions().then(refresh);
 })();
 </script>
 {% endblock %}

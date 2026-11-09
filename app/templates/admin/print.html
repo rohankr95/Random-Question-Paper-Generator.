@@ -28,7 +28,7 @@
   <div class="student">Name: ______________________________ &nbsp; Roll no.: ______________</div>
   {% endif %}
   {% if p.instructions and not show_key %}
-  <div class="instructions"><strong>Instructions</strong><div class="pre">{{ p.instructions }}</div></div>
+  <div class="instructions"><strong>Instructions</strong><div class="rich">{{ p.instructions|rich }}</div></div>
   {% endif %}
 </header>
 <ol class="questions">
