@@ -101,3 +101,60 @@ def test_fairness_report_time_warning():
     qs = [Candidate(id=1, difficulty="easy", marks=2, est_minutes=100)]
     r = fairness_report(qs, 60)
     assert r["total_marks"] == 2 and r["warnings"]
+
+
+# --- always include / exclude / swap -------------------------------------------------
+
+from app.generator import blueprint_totals, pick_replacement
+
+
+def test_forced_questions_always_present_and_count_towards_blueprint():
+    p = pool()
+    forced = [p[0], p[25]]  # one easy (1 mark), one difficult (10 marks)
+    for seed in range(40):
+        sel = select_questions(p, {"easy": 3, "medium": 2, "difficult": 2}, 30, seed=f"F{seed}", forced=forced)
+        ids = [q.id for q in sel.questions]
+        assert p[0].id in ids and p[25].id in ids
+        assert len(ids) == len(set(ids)) == 7
+        assert Counter(q.difficulty for q in sel.questions) == {"easy": 3, "medium": 2, "difficult": 2}
+        assert sum(q.marks for q in sel.questions) == 30
+
+
+def test_forced_more_than_blueprint_is_rejected():
+    p = pool()
+    with pytest.raises(GenerationError, match="more questions than the blueprint allows"):
+        select_questions(p, {"easy": 1}, None, forced=[p[0], p[1]])
+
+
+def test_forced_marks_above_total_rejected():
+    p = pool()
+    with pytest.raises(GenerationError, match="already add up to"):
+        select_questions(p, {"difficult": 2}, 12, forced=[p[21], p[23]])  # 10 + 10 > 12
+
+
+def test_only_forced_questions():
+    p = pool()
+    sel = select_questions(p, {"easy": 2}, 3, forced=[p[0], p[1]])
+    assert sorted(q.id for q in sel.questions) == [p[0].id, p[1].id]
+
+
+def test_blueprint_totals_with_forced():
+    p = pool()
+    totals, err = blueprint_totals(p, {"easy": 1, "difficult": 1}, [p[21]])  # forced difficult 10
+    assert err is None and totals == [11, 12]
+    _, err = blueprint_totals(p, {"easy": 1}, [p[21]])
+    assert "blueprint allows" in err
+
+
+def test_pick_replacement_keeps_level_and_marks():
+    p = pool()
+    current = [p[0], p[2], p[10]]  # easy 1, easy 1, medium 3
+    for seed in range(30):
+        new, _ = pick_replacement(p, current, p[0], seed=f"R{seed}")
+        assert new.difficulty == "easy" and new.marks == 1 and new.id not in {c.id for c in current}
+
+
+def test_pick_replacement_when_nothing_left():
+    p = [Candidate(id=1, difficulty="easy", marks=1), Candidate(id=2, difficulty="easy", marks=2)]
+    with pytest.raises(GenerationError, match="no other approved"):
+        pick_replacement(p, [p[0]], p[0])

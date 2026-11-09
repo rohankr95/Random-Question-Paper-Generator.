@@ -110,6 +110,19 @@ pre { background: var(--bg); padding: .7rem; border-radius: 6px; overflow-x: aut
 details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 .generate-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center; gap: 1rem;
   padding: .8rem 0; margin-top: 1rem; background: var(--bg); border-top: 1px solid var(--border); z-index: 5; }
+.picker-scroll { max-height: 520px; overflow: auto; border-radius: 10px; }
+table.picker th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+.seg label { display: inline-flex; align-items: center; gap: .2rem; margin: 0 .5rem 0 0; font-weight: 400; font-size: .85rem; }
+.seg input { width: auto; margin: 0; }
+tr.pick-include td { background: var(--easy-bg); }
+tr.pick-exclude td { background: var(--difficult-bg); }
+tr.pick-exclude td.qtext { text-decoration: line-through; color: var(--muted); }
+.marker { display: inline-block; font-size: .75rem; font-weight: 600; padding: .05rem .45rem; border-radius: 99px;
+  border: 1px solid var(--border); margin-left: .3rem; white-space: nowrap; }
+form.swap { display: inline; }
+.edit-details { margin-top: .8rem; }
+.edit-details summary { color: var(--primary); }
+.edit-details form { margin-top: .8rem; }
 @media (max-width: 640px) {
   .topbar nav { order: 3; flex-basis: 100%; }
   .span2 { grid-column: auto; }

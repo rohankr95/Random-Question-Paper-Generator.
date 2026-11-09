@@ -7,6 +7,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 from . import generator
 from .models import (DIFFICULTIES, AuditLog, Paper, PaperQuestion, Question, User, db, log, utcnow)
 from .questions import apply_values, editor_form_values, find_similar, parse_question_form, subjects, topics
+from .richtext import clean_input, render, to_plain
 from .utils import parse_int, role_required
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -233,11 +234,46 @@ def _read_generate_form(form):
         "balance_setters": bool(form.get("balance_setters")),
         "cover_topics": bool(form.get("cover_topics")),
         "order": "random" if form.get("order") == "random" else "difficulty",
-        "instructions": (form.get("instructions") or "").strip(),
+        "instructions": clean_input(form.get("instructions")),
+        "include_ids": sorted(_picked_ids(form, "include")),
+        "exclude_ids": sorted(_picked_ids(form, "exclude")),
     }
     if not cfg["subject"]:
         raise ValueError("Choose a subject.")
     return cfg
+
+
+def _picked_ids(form, choice):
+    """Question ids the admin marked as "include" / "exclude" (form fields pick_<id>=<choice>)."""
+    ids = set()
+    for key, value in form.items():
+        if key.startswith("pick_") and key[5:].isdigit() and value == choice:
+            ids.add(int(key[5:]))
+    return ids
+
+
+def _id_list(raw):
+    return {int(x) for x in (raw or "").split(",") if x.strip().isdigit()}
+
+
+def _forced_questions(subject, include_ids):
+    """The approved questions of this subject the admin chose to always include."""
+    if not include_ids:
+        return []
+    found = Question.query.filter(Question.id.in_(include_ids), Question.status == "approved",
+                                  db.func.lower(Question.subject) == subject.strip().lower()).all()
+    missing = set(include_ids) - {q.id for q in found}
+    if missing:
+        raise ValueError("These questions can no longer be included (not approved or not in this subject): "
+                         + ", ".join(f"#{i}" for i in sorted(missing)))
+    return found
+
+
+def _pool_for(cfg):
+    """Eligible random-draw pool for a blueprint (fairness filters + the admin's exclusions)."""
+    excluded = set(cfg.get("exclude_ids") or []) | set(cfg.get("include_ids") or [])
+    return [q for q in _eligible_pool(cfg["subject"], cfg.get("exclude_recent", 0), cfg.get("fresh_only"))
+            if q.id not in excluded]
 
 
 @bp.route("/pool")
@@ -250,7 +286,14 @@ def pool_info():
         counts = {d: parse_int(request.args.get(d), d, 0, 500, default=0) for d in DIFFICULTIES}
     except ValueError:
         return jsonify({"error": "bad input"}), 400
-    pool = _eligible_pool(subject, exclude_recent, bool(request.args.get("fresh_only")))
+    include_ids, exclude_ids = _id_list(request.args.get("include")), _id_list(request.args.get("exclude"))
+    eligible = _eligible_pool(subject, exclude_recent, bool(request.args.get("fresh_only")))
+    eligible_ids = [q.id for q in eligible]
+    pool = [q for q in eligible if q.id not in exclude_ids and q.id not in include_ids]
+    try:
+        forced = _forced_questions(subject, include_ids)
+    except ValueError:
+        forced = []
     by_diff = {d: defaultdict(int) for d in DIFFICULTIES}
     for q in pool:
         by_diff[q.difficulty][q.marks] += 1
@@ -259,12 +302,35 @@ def pool_info():
         "marks_breakdown": {d: {str(k): v for k, v in sorted(by_diff[d].items())} for d in DIFFICULTIES},
         "setters": len({q.setter_id for q in pool}),
         "topics": len({q.topic.lower() for q in pool if q.topic}),
+        "eligible_ids": eligible_ids,
+        "included": {d: sum(1 for q in forced if q.difficulty == d) for d in DIFFICULTIES},
+        "included_marks": sum(q.marks for q in forced),
+        "excluded": len(exclude_ids),
     }
     if sum(counts.values()):
-        cands = [_to_candidate(q) for q in pool]
-        totals = generator.achievable_totals(cands, counts)
+        totals, error = generator.blueprint_totals([_to_candidate(q) for q in pool], counts,
+                                                   [_to_candidate(q) for q in forced])
         result["achievable_totals"] = totals[:400]
+        if error:
+            result["blueprint_error"] = error
     return jsonify(result)
+
+
+@bp.route("/pool/questions")
+@role_required("admin")
+def pool_questions():
+    """All approved questions of a subject, for the include/exclude picker on the generate page."""
+    subject = request.args.get("subject", "")
+    qs = (Question.query.filter(Question.status == "approved",
+                                db.func.lower(Question.subject) == subject.strip().lower())
+          .order_by(Question.difficulty, Question.topic, Question.id).all())
+    rank = {d: i for i, d in enumerate(DIFFICULTIES)}
+    qs.sort(key=lambda q: (rank.get(q.difficulty, 9), q.topic.lower(), q.id))
+    return jsonify([{
+        "id": q.id, "text": to_plain(q.text)[:220], "has_table": "<table" in q.text.lower(),
+        "difficulty": q.difficulty, "marks": q.marks, "minutes": q.est_minutes, "topic": q.topic,
+        "used": q.times_used,
+    } for q in qs])
 
 
 @bp.route("/generate", methods=["GET", "POST"])
@@ -273,26 +339,27 @@ def generate():
     form = request.form if request.method == "POST" else {
         "duration_minutes": 180, "num_sets": 1, "exclude_recent": 1, "balance_setters": "1",
         "cover_topics": "1", "order": "difficulty", "subject": request.args.get("subject", ""),
-        "instructions": "Answer all questions.\nMarks for each question are shown on the right.",
+        "instructions": "<ol><li>Answer <strong>all</strong> questions.</li>"
+                        "<li>Marks for each question are shown on the right.</li></ol>",
     }
     if request.method == "POST":
         try:
             cfg = _read_generate_form(request.form)
-            pool = _eligible_pool(cfg["subject"], cfg["exclude_recent"], cfg["fresh_only"])
+            forced = _forced_questions(cfg["subject"], cfg["include_ids"])
+            pool = _pool_for(cfg)
             counts = {d: cfg[d] for d in DIFFICULTIES}
             selection = generator.select_questions(
                 [_to_candidate(q) for q in pool], counts, cfg["total_marks"] or None,
+                forced=[_to_candidate(q) for q in forced],
                 balance_setters=cfg["balance_setters"], cover_topics=cfg["cover_topics"], order=cfg["order"],
             )
         except (ValueError, generator.GenerationError) as exc:
             flash(str(exc), "danger")
-            return render_template("admin/generate.html", form=form, subjects=subjects())
+            return _render_generate(form)
 
-        by_id = {q.id: q for q in pool}
+        by_id = {q.id: q for q in pool + forced}
         chosen = [by_id[c.id] for c in selection.questions]
-        setter_names = {u.id: u.display_name for u in User.query.filter_by(role="setter")}
-        report = generator.fairness_report(selection.questions, cfg["duration_minutes"], setter_names)
-        report["pool_size"] = len(pool)
+        report = _build_report(chosen, cfg, pool_size=len(pool) + len(forced))
         total = sum(q.marks for q in chosen)
         paper = Paper(
             code=_paper_code(), title=cfg["title"] or f"{cfg['subject']} Examination",
@@ -308,13 +375,44 @@ def generate():
         db.session.add(paper)
         db.session.flush()
         attempts = Paper.query.filter(Paper.subject == paper.subject, Paper.status != "final").count()
+        manual = ""
+        if cfg["include_ids"] or cfg["exclude_ids"]:
+            manual = (" included=" + ",".join(f"Q{i}" for i in cfg["include_ids"])
+                      + " excluded=" + ",".join(f"Q{i}" for i in cfg["exclude_ids"]))
         log(g.user, "paper_generate",
-            f"{paper.code} '{paper.title}' seed={paper.seed} questions={len(chosen)} marks={total} "
+            f"{paper.code} '{paper.title}' seed={paper.seed} questions={len(chosen)} marks={total}{manual} "
             f"(unfinalised drafts/discards for this subject: {attempts})")
         db.session.commit()
         flash("Paper generated. Review the fairness report, then finalise or discard it.", "success")
         return redirect(url_for("admin.paper", pid=paper.id))
-    return render_template("admin/generate.html", form=form, subjects=subjects())
+    return _render_generate(form)
+
+
+def _render_generate(form):
+    picks = {}
+    for key, value in form.items():
+        if key.startswith("pick_") and key[5:].isdigit() and value in ("include", "exclude"):
+            picks[key[5:]] = value
+    return render_template("admin/generate.html", form=form, subjects=subjects(), picks=picks)
+
+
+def _build_report(questions, cfg, pool_size):
+    """Fairness report for a list of Question rows (used at generation and after a swap)."""
+    setter_names = {u.id: u.display_name for u in User.query.filter_by(role="setter")}
+    report = generator.fairness_report([_to_candidate(q) for q in questions], cfg["duration_minutes"],
+                                       setter_names)
+    report["pool_size"] = pool_size
+    in_paper = {q.id for q in questions}
+    included = [i for i in cfg.get("include_ids") or [] if i in in_paper]
+    report["included"] = len(included)
+    report["excluded"] = len(cfg.get("exclude_ids") or [])
+    report["replaced"] = len(cfg.get("replaced") or [])
+    if included:
+        report["warnings"].append(
+            f"{len(included)} question(s) were chosen by the admin instead of being drawn at random "
+            "(marked 📌 below)."
+        )
+    return report
 
 
 def _paper_code():
@@ -338,7 +436,84 @@ def papers():
 @role_required("admin")
 def paper(pid):
     p = db.session.get(Paper, pid) or abort(404)
-    return render_template("admin/paper.html", p=p, report=p.report, cfg=p.config)
+    cfg = p.config
+    replaced_new = {r["new"] for r in cfg.get("replaced") or []}
+    return render_template("admin/paper.html", p=p, report=p.report, cfg=cfg,
+                           included=set(cfg.get("include_ids") or []), replaced_new=replaced_new,
+                           instructions_html=str(render(p.instructions)))
+
+
+@bp.route("/papers/<int:pid>/details", methods=["POST"])
+@role_required("admin")
+def paper_details(pid):
+    """Edit title, duration and instructions of a draft (does not touch the questions)."""
+    p = db.session.get(Paper, pid) or abort(404)
+    if p.status != "draft":
+        flash("Only draft papers can be edited.", "warning")
+        return redirect(url_for("admin.paper", pid=p.id))
+    try:
+        duration = parse_int(request.form.get("duration_minutes"), "Duration", 1, 1440)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin.paper", pid=p.id))
+    p.title = (request.form.get("title") or "").strip()[:200] or p.title
+    p.instructions = clean_input(request.form.get("instructions"))
+    if duration != p.duration_minutes:
+        p.duration_minutes = duration
+        cfg = p.config
+        cfg["duration_minutes"] = duration
+        p.config_json = json.dumps(cfg)
+        _refresh_report(p, cfg)
+    log(g.user, "paper_edit_details", p.code)
+    db.session.commit()
+    flash("Paper details saved.", "success")
+    return redirect(url_for("admin.paper", pid=p.id))
+
+
+def _refresh_report(p, cfg):
+    questions = [it.question for it in p.items]
+    p.report_json = json.dumps(_build_report(questions, cfg, pool_size=p.report.get("pool_size", 0)))
+
+
+@bp.route("/papers/<int:pid>/items/<int:iid>/replace", methods=["POST"])
+@role_required("admin")
+def replace_question(pid, iid):
+    """Swap one question of a draft for another randomly drawn one (same difficulty and marks)."""
+    p = db.session.get(Paper, pid) or abort(404)
+    item = next((it for it in p.items if it.id == iid), None) or abort(404)
+    if p.status != "draft":
+        flash("Questions can only be swapped while the paper is a draft.", "warning")
+        return redirect(url_for("admin.paper", pid=p.id))
+    reason = (request.form.get("reason") or "").strip()[:300]
+    cfg = p.config
+    pool = _pool_for(cfg)
+    current = [_to_candidate(it.question) for it in p.items]
+    old = next(c for c in current if c.id == item.question_id)
+    try:
+        new, seed = generator.pick_replacement(
+            [_to_candidate(q) for q in pool], current, old,
+            balance_setters=cfg.get("balance_setters", True), cover_topics=cfg.get("cover_topics", True),
+        )
+    except generator.GenerationError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin.paper", pid=p.id))
+    q = db.session.get(Question, new.id)
+    old_id = item.question_id
+    item.question_id, item.question = q.id, q
+    item.text, item.answer, item.topic = q.text, q.answer, q.topic
+    item.difficulty, item.marks, item.est_minutes = q.difficulty, q.marks, q.est_minutes
+    # The swapped-out question stays out of this paper's pool if it is swapped again.
+    cfg["exclude_ids"] = sorted(set(cfg.get("exclude_ids") or []) | {old_id})
+    cfg["include_ids"] = [i for i in cfg.get("include_ids") or [] if i != old_id]
+    cfg.setdefault("replaced", []).append({"old": old_id, "new": q.id, "seed": seed, "reason": reason})
+    p.config_json = json.dumps(cfg)
+    _refresh_report(p, cfg)
+    log(g.user, "paper_replace_question",
+        f"{p.code}: Q{old_id} -> Q{q.id} (random, seed={seed})" + (f" - {reason}" if reason else ""))
+    db.session.commit()
+    flash(f"Question {item.position} was replaced by a randomly drawn {q.difficulty} question "
+          f"worth {q.marks} mark(s).", "success")
+    return redirect(url_for("admin.paper", pid=p.id) + f"#item-{item.id}")
 
 
 @bp.route("/papers/<int:pid>/finalize", methods=["POST"])
