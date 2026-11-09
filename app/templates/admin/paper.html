@@ -82,7 +82,8 @@
   <h2>Questions (set A order)</h2>
   {% if p.status == 'draft' %}
   <p class="small muted">Not happy with a question? <strong>Swap</strong> replaces it with another randomly drawn question of the
-    same difficulty and marks, so the blueprint and total stay the same. The question bank itself is not changed.</p>
+    same difficulty and marks, so the blueprint and total stay the same. <strong>⭐ Make 1st</strong> makes a question number 1
+    in every set. The question bank itself is not changed.</p>
   {% endif %}
   <table class="list">
     <thead><tr><th>#</th><th>Question</th><th>Topic</th><th>Level</th><th>Marks</th><th>Time</th>{% if p.status == 'draft' %}<th></th>{% endif %}</tr></thead>
@@ -90,6 +91,7 @@
     {% for it in p.items %}
       <tr id="item-{{ it.id }}"><td>{{ loop.index }}</td>
         <td class="qtext"><div class="rich">{{ it.text|rich }}</div>
+          {% if it.question_id == first_id %}<span class="marker first" title="This question is question 1 in every set">⭐ 1st in every set</span>{% endif %}
           {% if it.question_id in included %}<span class="marker" title="Chosen by the admin, not drawn at random">📌 included by admin</span>{% endif %}
           {% if it.question_id in replaced_new %}<span class="marker" title="Randomly drawn to replace a swapped-out question">🔁 swapped in</span>{% endif %}
         </td>
@@ -101,6 +103,15 @@
                 onsubmit="var r = prompt('Swap question {{ loop.index }} for another random {{ it.difficulty }} question worth {{ it.marks }} mark(s)?\n\nOptional reason (kept in the audit log):', ''); if (r === null) return false; this.reason.value = r; return true;">
             {{ csrf() }}<input type="hidden" name="reason"><button class="btn">🔁 Swap</button>
           </form>
+          {% if it.question_id != first_id %}
+          <form method="post" class="swap" action="{{ url_for('admin.set_first_question', pid=p.id) }}">{{ csrf() }}
+            <input type="hidden" name="item" value="{{ it.id }}"><button class="btn" title="Make this question 1 in every set">⭐ Make 1st</button>
+          </form>
+          {% else %}
+          <form method="post" class="swap" action="{{ url_for('admin.set_first_question', pid=p.id) }}">{{ csrf() }}
+            <input type="hidden" name="item" value="none"><button class="btn" title="Stop fixing this question as number 1">Unset 1st</button>
+          </form>
+          {% endif %}
         </td>
         {% endif %}
       </tr>

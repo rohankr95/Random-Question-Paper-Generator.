@@ -158,3 +158,25 @@ def test_pick_replacement_when_nothing_left():
     p = [Candidate(id=1, difficulty="easy", marks=1), Candidate(id=2, difficulty="easy", marks=2)]
     with pytest.raises(GenerationError, match="no other approved"):
         pick_replacement(p, [p[0]], p[0])
+
+
+# --- fixed first question -------------------------------------------------------------
+
+def test_first_question_is_first_in_every_set():
+    p = pool()
+    first = p[25]  # a difficult question - still first, even with easy -> difficult ordering
+    for seed in range(20):
+        sel = select_questions(p, {"easy": 3, "medium": 3, "difficult": 2}, None, seed=f"1st{seed}",
+                               forced=[first], first_id=first.id)
+        assert sel.questions[0].id == first.id
+        for set_index in range(6):
+            items = shuffled_set(sel.questions, f"1st{seed}", set_index, lambda q: q.difficulty,
+                                 first_id=first.id, id_key=lambda q: q.id)
+            assert items[0].id == first.id
+            assert sorted(q.id for q in items) == sorted(q.id for q in sel.questions)
+
+
+def test_first_question_must_be_included():
+    p = pool()
+    with pytest.raises(GenerationError, match="must also be included"):
+        select_questions(p, {"easy": 2}, None, first_id=p[0].id)
